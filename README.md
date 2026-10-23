@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40014401106](https://github.com/Dmawa/netease-music-dylib/actions/runs/40014401106) ✅（三个 job 全绿）
-- 最新版本：v0.5.2（扫码登录改用官方 /weapi 加密接口）
+- 最近一次 CI：run [40016066172](https://github.com/Dmawa/netease-music-dylib/actions/runs/40016066172) ✅（三个 job 全绿）
+- 最新版本：v0.5.3（扫码被限制时可用「网页登录 / 粘贴 Cookie」兜底）
 
 ## 设计边界
 
@@ -28,6 +28,11 @@
   不是为了炫技——明文 `/api/login/qrcode/*` 会被服务端当成旧版客户端，
   扫码确认后回 8821「请切换其他登录方式或升级新版本再试」。
   成功后向服务端确认登录态，不靠本地 Cookie 猜测；界面内直接显示诊断信息。
+- **兜底登录**：若服务端限制第三方客户端扫码（8821「请切换其他登录方式或升级新版本再试」），
+  登录页底部「其他登录方式」提供：
+  ① 应用内 `WKWebView` 打开官方网页（扫码/手机号/短信都由官方页面处理，
+  登录后 `MUSIC_U` 落到共享 Cookie 存储，插件自动接管）；
+  ② 直接粘贴浏览器里的 Cookie。
 - **发现**：快捷入口（每日推荐、排行榜已接通；私人漫游 / 心动模式 / 私人雷达
   仍是占位）、推荐歌单、最近热门新歌。
 - **我的**：我喜欢的音乐 + 我创建/收藏的歌单。
@@ -58,7 +63,8 @@ src/
     NEPlayerPage.{h,m}    播放页（封面 + 歌词 + 控制）
     NELyricView.{h,m}     歌词滚动与逐字点亮
     NESidebar.{h,m}       左侧竖排导航
-    NELoginView.{h,m}     扫码登录
+    NELoginView.{h,m}     扫码登录 + 兜底入口（网页登录/粘贴 Cookie）
+    NEWebLogin.{h,m}      应用内官方网页登录（WKWebView，检测 MUSIC_U）
     NEQRCode.{h,m}        内置 QR 生成（字节模式，版本 1-10，纠错 M）
 shell-app/              测试用空壳宿主（scene 架构，模拟真实宿主条件）
 scripts/
@@ -126,8 +132,8 @@ python3 -c "import lief; b=lief.MachO.parse('Player.dylib'); print(b.size, [str(
 扫码不成功时的排查顺序：
 
 1. 看登录页状态文字：现在会显示 `<服务端原话>（状态码）`；
-2. 8821 是「客户端被判成旧版」的信号：v0.5.2 之前走明文 `/api` 会出现，
-   v0.5.2 已改用官方 `/weapi` 加密接口；若仍出现，把 `poll raw` 那几行发出来；
+2. 8821 是「服务端不接受这个客户端扫码」的信号：v0.5.2 已改用官方 `/weapi`
+   加密接口；若仍出现，请走登录页底部「其他登录方式」→ 网页登录；
 3. 803 之后仍失败，界面会区分「没收到 Cookie / 缺 MUSIC_U / MUSIC_U 不认」，
    对应服务端没下发凭证、Cookie 被系统拦下、凭证被判定无效三种情况。
 
