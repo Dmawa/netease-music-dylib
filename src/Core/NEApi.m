@@ -106,6 +106,30 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)restoreSession:(void (^)(BOOL, NSString *, NSString *))complete {
+    // 没有本地 Cookie：直接判定未登录
+    if (![NESession shared].isLoggedIn) {
+        complete(NO, nil, nil);
+        return;
+    }
+    // 有 MUSIC_U：向服务端确认一次（可能已过期/被踢下线）
+    [[NESession shared] GET:@"/api/nuser/account/get" params:nil complete:^(id json, NSError *error) {
+        if (error) {
+            // 网络失败不代表登录失效，保留本地 Cookie 下次再试
+            complete([NESession shared].isLoggedIn, nil, nil);
+            return;
+        }
+        NSDictionary *profile = json[@"profile"];
+        if (![profile isKindOfClass:[NSDictionary class]]) {
+            // 服务端明确说没登录 → 清掉失效 Cookie，避免一直用坏凭证
+            [[NESession shared] clearCookies];
+            complete(NO, nil, nil);
+            return;
+        }
+        complete(YES, profile[@"nickname"] ?: @"", profile[@"avatarUrl"] ?: @"");
+    }];
+}
+
 - (void)fetchAccount:(void (^)(NSString *, NSString *, NSError *))complete {
     [[NESession shared] GET:@"/api/nuser/account/get" params:nil complete:^(id json, NSError *error) {
         if (error) { complete(nil, nil, error); return; }

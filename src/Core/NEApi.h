@@ -50,6 +50,11 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (BOOL)isLoggedIn;
 - (void)logout;
 
+/// 启动时恢复登录态：有本地 Cookie 就向服务端校验一次，
+/// 返回 true 表示仍有效（登录状态可跨启动保持）
+- (void)restoreSession:(void (^)(BOOL loggedIn, NSString * _Nullable nickname,
+                                 NSString * _Nullable avatar))complete;
+
 #pragma mark 内容
 /// keyword 为空时返回推荐/热门，作为首页兜底
 - (void)searchSongs:(NSString *)keyword limit:(NSInteger)limit complete:(NESongsBlock)complete;

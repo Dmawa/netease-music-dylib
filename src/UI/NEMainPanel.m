@@ -27,6 +27,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) NEPlayerPage *playerPage;
 @property (nonatomic, strong) NEProfilePage *profilePage;
+@property (nonatomic, strong) UIButton *loginButton;
 /// 当前正在浏览的歌单（用于返回时显示标题）
 @property (nonatomic, copy) NSString *currentPlaylistTitle;
 
@@ -59,15 +60,21 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)loadAccountThenDiscover {
-    if (![[NEApi shared] isLoggedIn]) {
-        self.hint = @"未登录 · 点右上角登录";
+    // 每次进入都先向服务端确认登录态，保证重启后能自动恢复
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] restoreSession:^(BOOL loggedIn, NSString *nickname, NSString *avatar) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (loggedIn) {
+            self.hint = nickname.length ? [NSString stringWithFormat:@"已登录：%@", nickname] : @"已登录";
+        } else {
+            self.hint = @"未登录 · 点右上角登录";
+        }
+        [self.loginButton setTitle:(loggedIn ? @"已登录" : @"登录")
+                           forState:UIControlStateNormal];
+        self.loginButton.alpha = loggedIn ? 0.5 : 1.0;
         [self reload];
-        [self loadDiscover];
-        return;
-    }
-    [[NEApi shared] fetchAccount:^(NSString *nickname, NSString *avatar, NSError *error) {
-        self.hint = nickname.length ? [NSString stringWithFormat:@"已登录：%@", nickname] : @"已登录";
-        [self reload];
+        [self.profilePage reloadData];
     }];
     [self loadDiscover];
 }
@@ -110,6 +117,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     }
 
     UIButton *login = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.loginButton = login;
     [login setTitle:@"登录" forState:UIControlStateNormal];
     login.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     login.backgroundColor = NE_BRAND;
@@ -388,6 +396,19 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 #pragma mark - 登录（二维码）
 
 - (void)showLogin {
+    if ([[NEApi shared] isLoggedIn]) {
+        UIAlertController *a = [UIAlertController alertControllerWithTitle:@"已登录"
+            message:@"是否退出当前账号？" preferredStyle:UIAlertControllerStyleAlert];
+        [a addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [a addAction:[UIAlertAction actionWithTitle:@"退出登录" style:UIAlertActionStyleDestructive
+                                           handler:^(UIAlertAction *x) {
+            [[NEApi shared] logout];
+            [self loadAccountThenDiscover];
+        }]];
+        [[self topMostViewController] presentViewController:a animated:YES completion:nil];
+        return;
+    }
+
     UIViewController *vc = [UIViewController new];
     vc.view.backgroundColor = NE_BG;
 
@@ -444,9 +465,19 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
             case 801: status.text = @"等待扫码…";   break;
             case 802: status.text = @"已扫码，请在手机上确认"; break;
             case 803: {
+                // 关键：803 之后服务端会下发 MUSIC_U，需要确认已经拿到并落盘，
+                // 否则「登录成功」只是假象，重启就掉登录。
+                if (![[NEApi shared] isLoggedIn]) {
+                    status.text = @"登录成功，但未取到登录凭证，正在重试…";
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                                   dispatch_get_main_queue(), ^{
+                        [self pollLoginWith:unikey status:status];
+                    });
+                    return;
+                }
                 status.text = @"登录成功";
                 [self loadAccountThenDiscover];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
                                dispatch_get_main_queue(), ^{ [self closeLoginVC]; });
                 return;
             }
