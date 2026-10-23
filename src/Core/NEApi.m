@@ -269,6 +269,9 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 p.specialType = [d[@"specialType"] integerValue];
                 NSNumber *cid = d[@"creator"][@"userId"];
                 p.creatorID = [cid isKindOfClass:[NSNumber class]] ? cid.integerValue : 0;
+                NSString *creator = d[@"creator"][@"nickname"];
+                p.creatorName = [creator isKindOfClass:[NSString class]] ? creator : @"";
+                p.playCount = [d[@"playCount"] integerValue];
                 if (p.playlistID.length) [out addObject:p];
             }
             complete(out, nil);
@@ -415,6 +418,91 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         NSString *msg = [NEApi shared].isLoggedIn ? @"该歌曲无版权或需要会员" : @"请先登录以获取播放地址";
         complete(nil, [NSError errorWithDomain:@"NEMusic" code:-21
                                      userInfo:@{NSLocalizedDescriptionKey: msg}]);
+    }];
+}
+
+- (void)fetchCommentsForSongID:(NSString *)songID limit:(NSInteger)limit
+                         complete:(void (^)(NSArray<NSDictionary *> *, NSError *))complete {
+    if (!songID.length) {
+        complete(nil, [NSError errorWithDomain:@"NEMusic" code:-30
+                                     userInfo:@{NSLocalizedDescriptionKey: @"歌曲 ID 为空"}]);
+        return;
+    }
+    NSString *path = [NSString stringWithFormat:
+        @"/api/v1/resource/comments/R_SO_4_%@?limit=%ld&offset=0",
+        songID, (long)MAX(1, limit)];
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        if (![json isKindOfClass:[NSDictionary class]]) { complete(@[], nil); return; }
+
+        NSMutableArray *all = [NSMutableArray array];
+        NSMutableSet *seen = [NSMutableSet set];
+        for (NSString *key in @[@"hotComments", @"comments"]) {
+            NSArray *arr = json[key];
+            if (![arr isKindOfClass:[NSArray class]]) continue;
+            for (NSDictionary *c in arr) {
+                if (![c isKindOfClass:[NSDictionary class]]) continue;
+                id cid = c[@"commentId"];
+                if (cid && [seen containsObject:cid]) continue;
+                if (cid) [seen addObject:cid];
+                [all addObject:c];
+            }
+        }
+        complete(all, nil);
+    }];
+}
+
+- (void)likeSongID:(NSString *)songID liked:(BOOL)liked complete:(void (^)(BOOL, NSError *))complete {
+    if (![self isLoggedIn]) {
+        complete(NO, [NSError errorWithDomain:@"NEMusic" code:-31
+                                    userInfo:@{NSLocalizedDescriptionKey: @"请先登录"}]);
+        return;
+    }
+    NSString *path = [NSString stringWithFormat:
+        @"/api/radio/like?alg=itembased&trackId=%@&like=%@&time=3",
+        songID, liked ? @"true" : @"false"];
+    [[NESession shared] POST:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(NO, error); return; }
+        NSInteger code = [json[@"code"] integerValue];
+        if (code == 200) { complete(YES, nil); return; }
+        NSString *msg = json[@"message"] ?: @"操作失败";
+        complete(NO, [NSError errorWithDomain:@"NEMusic" code:code
+                                    userInfo:@{NSLocalizedDescriptionKey: msg}]);
+    }];
+}
+
+- (void)fetchUserDetailWithUID:(NSString *)uid
+                      complete:(void (^)(NSInteger, NSInteger, NSError *))complete {
+    if (!uid.length) { complete(0, 0, nil); return; }
+    NSString *path = [NSString stringWithFormat:@"/api/v1/user/detail/%@", uid];
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(0, 0, error); return; }
+        complete([json[@"level"] integerValue], [json[@"listenSongs"] integerValue], nil);
+    }];
+}
+
+- (void)fetchHeartModeSongsWithSeed:(NSString *)seedID limit:(NSInteger)limit
+                           complete:(NESongsBlock)complete {
+    if (!seedID.length) seedID = @"347230";
+    NSString *path = [NSString stringWithFormat:
+        @"/api/playmode/intelligence/list?id=%@&startMusicId=%@&count=%ld",
+        seedID, seedID, (long)MAX(1, limit)];
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+
+        NSArray *arr = nil;
+        id data = json[@"data"];
+        if ([data isKindOfClass:[NSArray class]]) arr = data;
+        else if ([data isKindOfClass:[NSDictionary class]]) {
+            arr = data[@"songInfo"] ?: data[@"songs"] ?: data[@"list"];
+        }
+        if (![arr isKindOfClass:[NSArray class]] || !arr.count) {
+            NSString *msg = json[@"message"] ?: @"心动模式需要登录后使用";
+            complete(nil, [NSError errorWithDomain:@"NEMusic" code:-32
+                                         userInfo:@{NSLocalizedDescriptionKey: msg}]);
+            return;
+        }
+        complete([NSArray arrayWithArray:NESongsFromArray(arr)], nil);
     }];
 }
 

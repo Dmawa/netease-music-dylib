@@ -35,9 +35,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *coverURL;
 @property (nonatomic, assign) NSInteger trackCount;
+@property (nonatomic, assign) NSInteger playCount;
 /// 网易云的特殊歌单标记：5 = 我喜欢的音乐
 @property (nonatomic, assign) NSInteger specialType;
 @property (nonatomic, assign) NSInteger creatorID;
+@property (nonatomic, copy)   NSString *creatorName;
 @end
 
 typedef void (^NEQRCodeBlock)(NSString * _Nullable unikey, NSError * _Nullable error);
@@ -107,6 +109,25 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)resolveStreamURLForSong:(NESong *)song
                      complete:(void (^)(NSString * _Nullable url, NSError * _Nullable error))complete;
 - (void)fetchLyricForSong:(NESong *)song complete:(NELyricBlock)complete;
+
+#pragma mark 互动
+/// 歌曲评论：返回原始评论字典（含 hotComments + comments，已去重）
+- (void)fetchCommentsForSongID:(NSString *)songID
+                         limit:(NSInteger)limit
+                      complete:(void (^)(NSArray<NSDictionary *> * _Nullable comments,
+                                         NSError * _Nullable error))complete;
+/// 喜欢 / 取消喜欢一首歌（需要登录）
+- (void)likeSongID:(NSString *)songID
+             liked:(BOOL)liked
+          complete:(void (^)(BOOL ok, NSError * _Nullable error))complete;
+/// 用户详情：等级 + 听歌量（匿名可读）
+- (void)fetchUserDetailWithUID:(NSString *)uid
+                      complete:(void (^)(NSInteger level, NSInteger listenSongs,
+                                         NSError * _Nullable error))complete;
+/// 心动模式：以 seedID 为种子要一批歌
+- (void)fetchHeartModeSongsWithSeed:(NSString *)seedID
+                              limit:(NSInteger)limit
+                           complete:(NESongsBlock)complete;
 
 @end
 

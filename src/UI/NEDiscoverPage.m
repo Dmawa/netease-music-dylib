@@ -352,13 +352,27 @@
 
 - (void)shortcutTapped:(NEShortcutCard *)c {
     NSInteger idx = c.tag - 1000;
-    if (idx == 4) {
-        // 排行榜：直接把榜单当歌单展示第一个
-        if (self.toplists.count) {
-            NERecommendItem *t = self.toplists.firstObject;
-            if ([self.delegate respondsToSelector:@selector(discoverPage:didOpenPlaylistID:title:)])
-                [self.delegate discoverPage:self didOpenPlaylistID:t.itemID title:t.title];
+
+    if (idx == 4) {             // 排行榜 → 发现页
+        if ([self.delegate respondsToSelector:@selector(discoverPageDidRequestToplist:)]) {
+            [self.delegate discoverPageDidRequestToplist:self];
         }
+        return;
+    }
+    if (idx == 1) {             // 私人漫游 → 漫游 tab
+        if ([self.delegate respondsToSelector:@selector(discoverPageDidRequestRoam:)]) {
+            [self.delegate discoverPageDidRequestRoam:self];
+        }
+        return;
+    }
+    if (idx == 2) {             // 心动模式
+        if ([self.delegate respondsToSelector:@selector(discoverPageDidRequestHeartMode:)]) {
+            [self.delegate discoverPageDidRequestHeartMode:self];
+        }
+        return;
+    }
+    if (idx == 3) {             // 私人雷达
+        [self toast:@"私人雷达接口未开放，先用「心动模式」"];
         return;
     }
     if (idx == 0) {

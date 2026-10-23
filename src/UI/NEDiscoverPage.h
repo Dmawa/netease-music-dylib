@@ -12,6 +12,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)discoverPage:(id)page didPlaySong:(NESong *)song;
 /// 拉到一整批歌曲（每日推荐等），交给面板按列表展示
 - (void)discoverPage:(id)page didLoadSongs:(NSArray<NESong *> *)songs title:(NSString *)title;
+/// 快捷入口：私人漫游 / 心动模式 / 排行榜
+- (void)discoverPageDidRequestRoam:(id)page;
+- (void)discoverPageDidRequestHeartMode:(id)page;
+- (void)discoverPageDidRequestToplist:(id)page;
 @end
 
 @interface NEDiscoverPage : UIView

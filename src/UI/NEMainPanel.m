@@ -9,14 +9,83 @@
 #import "NESidebar.h"
 #import "NELoginView.h"
 #import "NESettingsPage.h"
+#import "NEImageCache.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
-    NEPanelTabDiscover = 0,   // 推荐/发现（也是搜索结果页）
-    NEPanelTabProfile,        // 我的（收藏）
+    NEPanelTabRecommend = 0,  // 推荐（每日推荐/漫游/心动入口 + 搜索结果/歌单）
+    NEPanelTabDiscover,       // 发现（排行榜）
+    NEPanelTabRoam,           // 漫游（随机推荐）
     NEPanelTabPlayer,         // 正在播放
+    NEPanelTabProfile,        // 我的（放在最后）
 };
 
-@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate, NELoginViewDelegate, NESettingsPageDelegate>
+/// 带封面的内容行：歌曲 / 歌单 / 榜单通用
+@interface NEContentCell : UITableViewCell
+@property (nonatomic, strong) UIImageView *cover;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *subLabel;
+- (void)configureTitle:(NSString *)title sub:(NSString *)sub cover:(NSString *)coverURL;
+@end
+
+@implementation NEContentCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuse {
+    if ((self = [super initWithStyle:style reuseIdentifier:reuse])) {
+        self.backgroundColor = UIColor.clearColor;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        UIView *sel = [UIView new];
+        sel.backgroundColor = NE_CARD;
+        self.selectedBackgroundView = sel;
+
+        _cover = [[UIImageView alloc] initWithFrame:CGRectZero];
+        _cover.contentMode = UIViewContentModeScaleAspectFill;
+        _cover.clipsToBounds = YES;
+        _cover.layer.cornerRadius = 6;
+        _cover.layer.cornerCurve = kCACornerCurveContinuous;
+        _cover.backgroundColor = NE_CARD;
+        [self.contentView addSubview:_cover];
+
+        _titleLabel = [UILabel new];
+        _titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+        _titleLabel.textColor = NE_TEXT;
+        _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.contentView addSubview:_titleLabel];
+
+        _subLabel = [UILabel new];
+        _subLabel.font = [UIFont systemFontOfSize:12];
+        _subLabel.textColor = NE_TEXT_DIM;
+        _subLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.contentView addSubview:_subLabel];
+    }
+    return self;
+}
+
+- (void)configureTitle:(NSString *)title sub:(NSString *)sub cover:(NSString *)coverURL {
+    _titleLabel.text = title ?: @"";
+    _subLabel.text = sub ?: @"";
+    _cover.image = nil;
+    if (coverURL.length) {
+        __weak typeof(self) weakSelf = self;
+        [[NEImageCache shared] loadImageWithURL:coverURL completion:^(UIImage *image) {
+            if (image) weakSelf.cover.image = image;
+        }];
+    }
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat h = self.contentView.bounds.size.height;
+    CGFloat w = self.contentView.bounds.size.width;
+    CGFloat s = MIN(46, h - 12);
+    _cover.frame = CGRectMake(14, (h - s) / 2, s, s);
+    CGFloat x = CGRectGetMaxX(_cover.frame) + 12;
+    _titleLabel.frame = CGRectMake(x, (h - 34) / 2, w - x - 16, 18);
+    _subLabel.frame = CGRectMake(x, CGRectGetMaxY(_titleLabel.frame) + 1, w - x - 16, 15);
+}
+
+@end
+
+@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate, NELoginViewDelegate, NESettingsPageDelegate, UIGestureRecognizerDelegate>
 @property (nonatomic, assign) NEPanelTab tab;
 @property (nonatomic, strong) UIView *headerBar;
 @property (nonatomic, strong) NESidebar *sidebar;
@@ -26,6 +95,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) UIView *playerBar;
 @property (nonatomic, strong) UILabel *nowTitle;
 @property (nonatomic, strong) UILabel *nowSub;
+@property (nonatomic, strong) UIImageView *barCover;
+@property (nonatomic, copy) NSString *barCoverURL;
 @property (nonatomic, strong) UIButton *playBtn;
 @property (nonatomic, strong) UISlider *progress;
 @property (nonatomic, strong) UILabel *timeLabel;
@@ -37,7 +108,11 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, copy) NSString *currentPlaylistTitle;
 
 @property (nonatomic, strong) NSArray<NESong *> *songs;
-/// 列表模式：搜索结果 / 歌单曲目用 table 展示；否则「发现」页展示推荐内容
+/// 发现页（排行榜）
+@property (nonatomic, strong) NSArray<NERecommendItem *> *toplists;
+/// 漫游页（随机推荐）
+@property (nonatomic, strong) NSArray<NESong *> *roamSongs;
+/// 列表模式：搜索结果 / 歌单曲目用 table 展示；否则「推荐」页展示推荐内容
 @property (nonatomic, assign) BOOL browsingList;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
@@ -51,7 +126,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
         self.backgroundColor = NE_BG;
-        self.tab = NEPanelTabDiscover;
+        self.tab = NEPanelTabRecommend;
         [self buildHeader];
         [self buildTable];
         [self buildPlayerPage];
@@ -103,13 +178,18 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _sidebar = [[NESidebar alloc] initWithFrame:CGRectZero];
     _sidebar.delegate = self;
 
+    // 按网易云版式：推荐 → 发现 → 漫游 → 播放 → 我的（我的放最后）
     NESidebarItem *i0 = [NESidebarItem new];
-    i0.title = @"发现"; i0.iconName = @"safari"; i0.iconNameSelected = @"safari.fill"; i0.tag = 0;
+    i0.title = @"推荐"; i0.iconName = @"sparkles"; i0.iconNameSelected = @"sparkles"; i0.tag = 0;
     NESidebarItem *i1 = [NESidebarItem new];
-    i1.title = @"我的"; i1.iconName = @"person"; i1.iconNameSelected = @"person.fill"; i1.tag = 1;
+    i1.title = @"发现"; i1.iconName = @"safari"; i1.iconNameSelected = @"safari.fill"; i1.tag = 1;
     NESidebarItem *i2 = [NESidebarItem new];
-    i2.title = @"播放"; i2.iconName = @"play.circle"; i2.iconNameSelected = @"play.circle.fill"; i2.tag = 2;
-    _sidebar.items = @[i0, i1, i2];
+    i2.title = @"漫游"; i2.iconName = @"infinity"; i2.iconNameSelected = @"infinity"; i2.tag = 2;
+    NESidebarItem *i3 = [NESidebarItem new];
+    i3.title = @"播放"; i3.iconName = @"play.circle"; i3.iconNameSelected = @"play.circle.fill"; i3.tag = 3;
+    NESidebarItem *i4 = [NESidebarItem new];
+    i4.title = @"我的"; i4.iconName = @"person"; i4.iconNameSelected = @"person.fill"; i4.tag = 4;
+    _sidebar.items = @[i0, i1, i2, i3, i4];
     _sidebar.selectedIndex = 0;
     [self addSubview:_sidebar];
 
@@ -151,7 +231,9 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
     self.settingsPage.hidden = YES;      // 切 tab 时关掉设置页
     self.tab = (NEPanelTab)index;
-    if (self.tab == NEPanelTabDiscover) self.browsingList = NO;
+    if (self.tab == NEPanelTabRecommend) self.browsingList = NO;
+    if (self.tab == NEPanelTabDiscover) [self loadToplistsIfNeeded];
+    if (self.tab == NEPanelTabRoam) [self loadRoamIfNeeded];
     [self highlightTab];
     [self reload];
 }
@@ -212,24 +294,24 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)reload {
-    BOOL isPlayer   = (self.tab == NEPanelTabPlayer);
-    BOOL isProfile  = (self.tab == NEPanelTabProfile);
-    BOOL isDiscover = (self.tab == NEPanelTabDiscover);
+    BOOL isRecommend = (self.tab == NEPanelTabRecommend);
+    BOOL isDiscover  = (self.tab == NEPanelTabDiscover);
+    BOOL isRoam      = (self.tab == NEPanelTabRoam);
+    BOOL isPlayer    = (self.tab == NEPanelTabPlayer);
+    BOOL isProfile   = (self.tab == NEPanelTabProfile);
 
-    // 搜索结果 / 歌单曲目 用 table 展示时，必须把发现页藏起来，
-    // 否则两个视图会重叠；没进列表模式时发现页必须可见。
-    BOOL showTable = (isDiscover && self.browsingList);
+    // 发现/漫游固定用列表；推荐页只在搜索/歌单详情时切列表
+    BOOL showTable = isDiscover || isRoam || (isRecommend && self.browsingList);
 
     self.playerPage.hidden   = !isPlayer;
     self.profilePage.hidden  = !isProfile;
-    self.discoverPage.hidden = (!isDiscover || showTable);
+    self.discoverPage.hidden = !(isRecommend && !showTable);
     self.table.hidden        = !showTable;
 
-    if (isDiscover && !showTable) {
+    if (isRecommend && !showTable) {
         [self.discoverPage reloadData];
         return;
     }
-
     if (isPlayer) {
         [self.playerPage refresh];
         return;
@@ -238,55 +320,68 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         [self.profilePage reloadData];
         return;
     }
-    [self setNeedsLayout];
     [self.table reloadData];
 }
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)section {
+    if (self.tab == NEPanelTabDiscover) return self.toplists.count;
+    if (self.tab == NEPanelTabRoam) return self.roamSongs.count;
     if (self.loading) return 1;
     if (!self.songs.count) return 1;
     return self.songs.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip {
-    static NSString *cid = @"song";
-    UITableViewCell *cell = [tv dequeueReusableCellWithIdentifier:cid];
+    static NSString *cid = @"content";
+    NEContentCell *cell = [tv dequeueReusableCellWithIdentifier:cid];
     if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cid];
-        cell.backgroundColor = UIColor.clearColor;
-        cell.textLabel.textColor = NE_TEXT;
-        cell.detailTextLabel.textColor = NE_TEXT_DIM;
-        cell.textLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-        cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        UIView *sel = [UIView new];
-        sel.backgroundColor = NE_CARD;
-        cell.selectedBackgroundView = sel;
+        cell = [[NEContentCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cid];
     }
 
+    if (self.tab == NEPanelTabDiscover) {
+        if (ip.row >= (NSInteger)self.toplists.count) return cell;
+        NERecommendItem *item = self.toplists[ip.row];
+        [cell configureTitle:item.title sub:item.subtitle cover:item.coverURL];
+        return cell;
+    }
+    if (self.tab == NEPanelTabRoam) {
+        if (ip.row >= (NSInteger)self.roamSongs.count) return cell;
+        NESong *s = self.roamSongs[ip.row];
+        [cell configureTitle:s.name sub:s.artist cover:s.coverURL];
+        return cell;
+    }
     if (self.loading) {
-        cell.textLabel.text = @"加载中…";
-        cell.detailTextLabel.text = @"";
+        [cell configureTitle:@"加载中…" sub:@"" cover:nil];
         return cell;
     }
     if (!self.songs.count) {
-        cell.textLabel.text = @"暂无内容";
-        cell.detailTextLabel.text = self.hint ?: @"";
+        [cell configureTitle:@"暂无内容" sub:self.hint ?: @"" cover:nil];
         return cell;
     }
-
     NESong *s = self.songs[ip.row];
-    cell.textLabel.text = s.name;
     NSString *sub = s.artist;
-    if (s.vipOnly) sub = [sub stringByAppendingString:@"   VIP"];
-    cell.detailTextLabel.text = sub;
-    cell.textLabel.textColor = [s.songID isEqualToString:[NEPlayer shared].currentSong.songID]
-        ? NE_BRAND : NE_TEXT;
+    if (s.vipOnly) sub = [sub stringByAppendingString:@"  VIP"];
+    [cell configureTitle:s.name sub:sub cover:s.coverURL];
     return cell;
 }
 
 - (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip {
     [tv deselectRowAtIndexPath:ip animated:YES];
+
+    if (self.tab == NEPanelTabDiscover) {
+        if (ip.row >= (NSInteger)self.toplists.count) return;
+        NERecommendItem *item = self.toplists[ip.row];
+        [self openPlaylistID:item.itemID title:item.title];
+        return;
+    }
+    if (self.tab == NEPanelTabRoam) {
+        if (ip.row >= (NSInteger)self.roamSongs.count) return;
+        [[NEPlayer shared] playQueue:self.roamSongs atIndex:ip.row];
+        self.tab = NEPanelTabPlayer;
+        [self highlightTab];
+        [self reload];
+        return;
+    }
     if (self.loading || ip.row >= (NSInteger)self.songs.count) return;
     [[NEPlayer shared] playQueue:self.songs atIndex:ip.row];
     self.tab = NEPanelTabPlayer;
@@ -297,22 +392,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 #pragma mark - NEDiscoverPageDelegate
 
 - (void)discoverPage:(id)page didOpenPlaylistID:(NSString *)playlistID title:(NSString *)title {
-    if (!playlistID.length) return;
-    self.currentPlaylistTitle = title;
-    self.browsingList = YES;
-    self.loading = YES;
-    [self reload];
-
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] fetchPlaylistSongs:playlistID complete:^(NSArray<NESong *> *songs, NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) return;
-        self.loading = NO;
-        self.songs = error ? @[] : songs;
-        self.hint = error ? error.localizedDescription
-                          : [NSString stringWithFormat:@"%@ · %lu 首", title ?: @"", (unsigned long)songs.count];
-        [self reload];
-    }];
+    [self openPlaylistID:playlistID title:title];
 }
 
 - (void)discoverPage:(id)page didPlaySong:(NESong *)song {
@@ -330,38 +410,123 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.browsingList = YES;
     self.loading = NO;
     self.hint = [NSString stringWithFormat:@"%@ · %lu 首", title ?: @"", (unsigned long)songs.count];
-    self.tab = NEPanelTabDiscover;
+    self.tab = NEPanelTabRecommend;
     [self highlightTab];
     [self reload];
+}
+
+#pragma mark - 发现/漫游/心动
+
+- (void)loadToplistsIfNeeded {
+    if (self.toplists.count) return;
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchToplists:^(NSArray<NERecommendItem *> *items, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.toplists = items ?: @[];
+        [self reload];
+    }];
+}
+
+- (void)loadRoamIfNeeded {
+    if (self.roamSongs.count) return;
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchRecommendNewSongs:30 complete:^(NSArray<NERecommendItem *> *items, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        NSMutableArray<NESong *> *songs = [NSMutableArray array];
+        for (NERecommendItem *item in items) {
+            NESong *song = [NESong new];
+            song.songID = item.itemID;
+            song.name = item.title;
+            song.artist = item.subtitle;
+            song.coverURL = item.coverURL;
+            if (song.songID.length) [songs addObject:song];
+        }
+        self.roamSongs = songs;
+        [self reload];
+    }];
+}
+
+- (void)openPlaylistID:(NSString *)playlistID title:(NSString *)title {
+    if (!playlistID.length) return;
+    self.currentPlaylistTitle = title;
+    self.tab = NEPanelTabRecommend;
+    self.browsingList = YES;
+    self.loading = YES;
+    [self highlightTab];
+    [self reload];
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchPlaylistSongs:playlistID complete:^(NSArray<NESong *> *songs, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.loading = NO;
+        self.songs = error ? @[] : songs;
+        self.hint = error ? error.localizedDescription
+                          : [NSString stringWithFormat:@"%@ · %lu 首", title ?: @"", (unsigned long)songs.count];
+        [self reload];
+    }];
+}
+
+- (void)alertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+        message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
+    UIViewController *host = [self topMostViewController];
+    if (host) [host presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)discoverPageDidRequestRoam:(id)page {
+    self.tab = NEPanelTabRoam;
+    [self highlightTab];
+    [self loadRoamIfNeeded];
+    [self reload];
+}
+
+- (void)discoverPageDidRequestToplist:(id)page {
+    self.tab = NEPanelTabDiscover;
+    [self highlightTab];
+    [self loadToplistsIfNeeded];
+    [self reload];
+}
+
+- (void)discoverPageDidRequestHeartMode:(id)page {
+    [self runHeartMode];
+}
+
+- (void)profilePageDidRequestHeartMode:(id)page {
+    [self runHeartMode];
+}
+
+- (void)runHeartMode {
+    NSString *seed = [NEPlayer shared].currentSong.songID;
+    if (!seed.length) seed = self.songs.firstObject.songID;
+    if (!seed.length) seed = @"347230";
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchHeartModeSongsWithSeed:seed limit:30 complete:^(NSArray<NESong *> *songs, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (error || !songs.count) {
+            [self alertWithTitle:@"心动模式不可用"
+                         message:error.localizedDescription ?: @"服务端没有返回歌曲"];
+            return;
+        }
+        self.songs = songs;
+        self.browsingList = YES;
+        self.loading = NO;
+        self.hint = [NSString stringWithFormat:@"心动模式 · %lu 首", (unsigned long)songs.count];
+        self.tab = NEPanelTabRecommend;
+        [self highlightTab];
+        [self reload];
+    }];
 }
 
 #pragma mark - NEProfilePageDelegate
 
 - (void)profilePage:(id)page didSelectPlaylist:(NEPlaylist *)playlist {
-    if (!playlist.playlistID.length) return;
-    self.currentPlaylistTitle = playlist.name;
-    // 切回列表视图展示该歌单曲目
-    self.tab = NEPanelTabDiscover;
-    self.browsingList = YES;
-    [self highlightTab];
-    self.loading = YES;
-    [self reload];
-
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] fetchPlaylistSongs:playlist.playlistID complete:^(NSArray<NESong *> *songs, NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) return;
-        self.loading = NO;
-        if (error) {
-            self.hint = error.localizedDescription;
-            self.songs = @[];
-        } else {
-            self.songs = songs;
-            self.hint = [NSString stringWithFormat:@"%@ · %lu 首",
-                         playlist.name ?: @"歌单", (unsigned long)songs.count];
-        }
-        [self reload];
-    }];
+    [self openPlaylistID:playlist.playlistID title:playlist.name];
 }
 
 #pragma mark - 搜索
@@ -375,7 +540,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         self.songs = @[];
         self.currentPlaylistTitle = nil;
         self.hint = @"";
-        self.tab = NEPanelTabDiscover;
+        self.tab = NEPanelTabRecommend;
         self.browsingList = NO;
         [self highlightTab];
         [self reload];
@@ -383,7 +548,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     }
 
     // search merged into the top search bar
-    self.tab = NEPanelTabDiscover;
+    self.tab = NEPanelTabRecommend;
     self.browsingList = YES;
     [self highlightTab];
     self.currentPlaylistTitle = [NSString stringWithFormat:@"搜索：%@", kw];
@@ -475,6 +640,21 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _playerBar.layer.borderColor = NE_STROKE.CGColor;
     [self addSubview:_playerBar];
 
+    _barCover = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _barCover.backgroundColor = NE_CARD;
+    _barCover.layer.cornerRadius = 6;
+    _barCover.layer.cornerCurve = kCACornerCurveContinuous;
+    _barCover.clipsToBounds = YES;
+    _barCover.contentMode = UIViewContentModeScaleAspectFill;
+    _barCover.userInteractionEnabled = NO;
+    [_playerBar addSubview:_barCover];
+
+    // 点播放条打开播放页（和网易云一致）
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
+                                   initWithTarget:self action:@selector(openPlayerPage)];
+    tap.delegate = self;      // 点在按钮/滑杆上时不触发
+    [_playerBar addGestureRecognizer:tap];
+
     _nowTitle = [[UILabel alloc] initWithFrame:CGRectZero];
     _nowTitle.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
     _nowTitle.textColor = NE_TEXT;
@@ -503,14 +683,28 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)layoutPlayerBar {
     CGFloat w = self.bounds.size.width;
-    _nowTitle.frame = CGRectMake(14, 10, w - 90, 18);
-    _nowSub.frame = CGRectMake(14, 30, w - 90, 14);
+    _barCover.frame = CGRectMake(10, 10, 44, 44);
+    _nowTitle.frame = CGRectMake(64, 10, w - 140, 18);
+    _nowSub.frame = CGRectMake(64, 30, w - 140, 14);
     _playBtn.frame = CGRectMake(w - 56, 12, 44, 44);
     // 细进度条贴在播放条顶部
     _progress.frame = CGRectMake(0, 0, w, 2);
 }
 
 - (void)toggle { [[NEPlayer shared] togglePlayPause]; }
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+       shouldReceiveTouch:(UITouch *)touch {
+    return ![touch.view isKindOfClass:[UIControl class]];
+}
+
+- (void)openPlayerPage {
+    if (self.tab == NEPanelTabPlayer) return;
+    self.tab = NEPanelTabPlayer;
+    self.settingsPage.hidden = YES;
+    [self highlightTab];
+    [self reload];
+}
 
 - (void)seekEnd {
     [[NEPlayer shared] seekTo:self.progress.value];
@@ -534,6 +728,18 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     NESong *s = p.currentSong;
     self.nowTitle.text = s.name ?: @"未在播放";
     self.nowSub.text = s.artist ?: @"";
+    if (s.coverURL.length && ![s.coverURL isEqualToString:self.barCoverURL]) {
+        self.barCoverURL = s.coverURL;
+        self.barCover.image = nil;
+        __weak typeof(self) weakSelf = self;
+        [[NEImageCache shared] loadImageWithURL:s.coverURL completion:^(UIImage *image) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (image) self.barCover.image = image;
+        }];
+    } else if (!s.coverURL.length) {
+        self.barCoverURL = nil;
+        self.barCover.image = nil;
+    }
     [self.playBtn setTitle:(p.isPlaying ? @"❚❚" : @"▶︎") forState:UIControlStateNormal];
     self.progress.maximumValue = MAX(1.0, p.duration);
     if (!self.progress.isTracking) self.progress.value = p.currentTime;

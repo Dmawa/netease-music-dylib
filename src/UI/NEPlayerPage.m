@@ -23,6 +23,11 @@
 @property (nonatomic, assign) BOOL showsTranslation;
 @property (nonatomic, assign) BOOL userSeeking;
 @property (nonatomic, strong) NESong *loadedSong;
+@property (nonatomic, strong) UIButton *likeBtn;
+@property (nonatomic, strong) UIButton *commentBtn;
+/// 当前这首歌是否已喜欢（本地点亮用）
+@property (nonatomic, copy, nullable) NSString *likedSongID;
+@property (nonatomic, strong, nullable) UIViewController *commentsVC;
 @property (nonatomic, copy) NSString *coverURLString;
 @property (nonatomic, strong) UIImageView *coverBlurBackdrop;
 @end
@@ -117,7 +122,17 @@
     _modeBtn.layer.cornerRadius = 12;
     _modeBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
 
-    for (UIButton *b in @[_prevBtn, _playBtn, _nextBtn, _modeBtn]) [self addSubview:b];
+    _likeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    [_likeBtn setImage:[UIImage systemImageNamed:@"heart"] forState:UIControlStateNormal];
+    _likeBtn.tintColor = NE_TEXT_DIM;
+    [_likeBtn addTarget:self action:@selector(toggleLike) forControlEvents:UIControlEventTouchUpInside];
+
+    _commentBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    [_commentBtn setImage:[UIImage systemImageNamed:@"text.bubble"] forState:UIControlStateNormal];
+    _commentBtn.tintColor = NE_TEXT_DIM;
+    [_commentBtn addTarget:self action:@selector(showComments) forControlEvents:UIControlEventTouchUpInside];
+
+    for (UIButton *b in @[_prevBtn, _playBtn, _nextBtn, _modeBtn, _likeBtn, _commentBtn]) [self addSubview:b];
 }
 
 - (UIButton *)controlButton:(NSString *)title size:(CGFloat)size action:(SEL)action {
@@ -186,6 +201,9 @@
     _playBtn.frame = CGRectMake(cx - 24, cy - 24, 48, 48);
     _nextBtn.frame = CGRectMake(cx + 48, cy - 16, 44, 32);
     _modeBtn.frame = CGRectMake(W - 44, cy - 12, 24, 24);
+    // 喜欢 / 评论：放在进度条右上方
+    _likeBtn.frame = CGRectMake(W - 76, barY - 32, 28, 28);
+    _commentBtn.frame = CGRectMake(W - 42, barY - 32, 28, 28);
 }
 
 #pragma mark - 操作
@@ -253,8 +271,118 @@
 }
 
 - (void)onTrack {
+    self.likedSongID = nil;          // 换歌后喜欢状态未知，先熄灭
+    [self updateLikeButton];
     [self loadLyricForCurrentSong];
     [self refresh];
+}
+
+- (void)updateLikeButton {
+    BOOL liked = self.likedSongID.length &&
+        [self.likedSongID isEqualToString:[NEPlayer shared].currentSong.songID];
+    [_likeBtn setImage:[UIImage systemImageNamed:(liked ? @"heart.fill" : @"heart")]
+              forState:UIControlStateNormal];
+    _likeBtn.tintColor = liked ? NE_BRAND : NE_TEXT_DIM;
+}
+
+- (void)toggleLike {
+    NESong *song = [NEPlayer shared].currentSong;
+    if (!song.songID.length) return;
+    if (![[NEApi shared] isLoggedIn]) {
+        [self presentAlert:@"请先登录" message:@"喜欢歌曲需要登录"];
+        return;
+    }
+    BOOL willLike = ![self.likedSongID isEqualToString:song.songID];
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] likeSongID:song.songID liked:willLike complete:^(BOOL ok, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (!ok) {
+            [self presentAlert:@"操作失败" message:error.localizedDescription];
+            return;
+        }
+        self.likedSongID = willLike ? song.songID : nil;
+        [self updateLikeButton];
+    }];
+}
+
+- (void)showComments {
+    NESong *song = [NEPlayer shared].currentSong;
+    if (!song.songID.length) return;
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchCommentsForSongID:song.songID limit:30
+                                complete:^(NSArray<NSDictionary *> *comments, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self presentComments:comments error:error];
+    }];
+}
+
+- (void)presentComments:(NSArray<NSDictionary *> *)comments error:(NSError *)error {
+    NSMutableString *text = [NSMutableString string];
+    for (NSDictionary *c in comments) {
+        if (![c isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *user = [c[@"user"] isKindOfClass:[NSDictionary class]] ? c[@"user"] : nil;
+        NSString *name = [user[@"nickname"] isKindOfClass:[NSString class]] ? user[@"nickname"] : @"匿名用户";
+        NSString *content = [c[@"content"] isKindOfClass:[NSString class]] ? c[@"content"] : @"";
+        NSNumber *liked = [c[@"likedCount"] isKindOfClass:[NSNumber class]] ? c[@"likedCount"] : @0;
+        [text appendFormat:@"%@  ♡%ld\n%@\n\n", name, (long)[liked integerValue], content];
+    }
+    if (!text.length) [text appendString:(error.localizedDescription ?: @"暂无评论")];
+
+    UIViewController *vc = [UIViewController new];
+    vc.view.backgroundColor = NE_BG;
+    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+
+    UITextView *tv = [[UITextView alloc] initWithFrame:vc.view.bounds];
+    tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    tv.editable = NO;
+    tv.backgroundColor = UIColor.clearColor;
+    tv.textColor = NE_TEXT;
+    tv.font = [UIFont systemFontOfSize:13];
+    tv.text = text;
+    tv.contentInset = UIEdgeInsetsMake(60, 16, 24, 16);
+    [vc.view addSubview:tv];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 52, vc.view.bounds.size.width, 22)];
+    title.text = @"评论";
+    title.textColor = NE_TEXT;
+    title.textAlignment = NSTextAlignmentCenter;
+    title.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    title.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [vc.view addSubview:title];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    [close setTitle:@"关闭" forState:UIControlStateNormal];
+    close.frame = CGRectMake(vc.view.bounds.size.width - 76, 46, 64, 34);
+    close.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [close addTarget:self action:@selector(dismissComments) forControlEvents:UIControlEventTouchUpInside];
+    [vc.view addSubview:close];
+
+    self.commentsVC = vc;
+    UIViewController *host = [self topMostVC];
+    if (host) [host presentViewController:vc animated:YES completion:nil];
+}
+
+- (void)dismissComments {
+    [self.commentsVC dismissViewControllerAnimated:YES completion:nil];
+    self.commentsVC = nil;
+}
+
+- (UIViewController *)topMostVC {
+    UIWindow *window = self.window;
+    if (!window) return nil;
+    UIViewController *vc = window.rootViewController;
+    while (vc.presentedViewController) vc = vc.presentedViewController;
+    return vc;
+}
+
+- (void)presentAlert:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+        message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
+    UIViewController *host = [self topMostVC];
+    if (host) [host presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)loadLyricForCurrentSong {
