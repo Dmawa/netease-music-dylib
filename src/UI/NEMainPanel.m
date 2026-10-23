@@ -402,12 +402,13 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
             case 800: status.text = @"二维码已过期"; return;
             case 801: status.text = @"等待扫码…";   break;
             case 802: status.text = @"已扫码，请在手机上确认"; break;
-            case 803:
+            case 803: {
                 status.text = @"登录成功";
                 [self loadAccountThenDiscover];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
                                dispatch_get_main_queue(), ^{ [self closeLoginVC]; });
                 return;
+            }
             default:  status.text = [NSString stringWithFormat:@"状态 %ld", (long)code]; break;
         }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
