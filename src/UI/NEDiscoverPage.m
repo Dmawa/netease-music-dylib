@@ -160,7 +160,7 @@
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 
 @property (nonatomic, strong) NSArray<NERecommendItem *> *playlists;
-@property (nonatomic, strong) NSArray<NERecommendItem *> *newSongs;
+@property (nonatomic, strong) NSArray<NERecommendItem *> *recentSongs;
 @property (nonatomic, strong) NSArray<NERecommendItem *> *toplists;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, assign) BOOL layoutDone;
@@ -208,7 +208,7 @@
     dispatch_group_enter(g);
     [[NEApi shared] fetchRecommendNewSongs:8 complete:^(NSArray<NERecommendItem *> *items, NSError *e) {
         __strong typeof(weakSelf) s = weakSelf;
-        if (s) s.newSongs = items ?: @[];
+        if (s) s.recentSongs = items ?: @[];
         dispatch_group_leave(g);
     }];
 
@@ -311,11 +311,11 @@
     }
 
     // ---------- 最近热门（新歌） ----------
-    if (self.newSongs.count) {
+    if (self.recentSongs.count) {
         [self addSectionTitle:@"最近热门" width:w y:&y];
         CGFloat rowH = 56;
-        for (NSInteger i = 0; i < (NSInteger)self.newSongs.count; i++) {
-            NERecommendItem *it = self.newSongs[i];
+        for (NSInteger i = 0; i < (NSInteger)self.recentSongs.count; i++) {
+            NERecommendItem *it = self.recentSongs[i];
             NESongRow *row = [[NESongRow alloc] initWithFrame:CGRectMake(pad, y, usable, rowH)];
             row.indexLabel.text = [NSString stringWithFormat:@"%02ld", (long)(i + 1)];
             row.title.text = it.title;
@@ -383,8 +383,8 @@
 
 - (void)songTapped:(NESongRow *)row {
     NSInteger i = row.tag - 3000;
-    if (i < 0 || i >= (NSInteger)self.newSongs.count) return;
-    NERecommendItem *it = self.newSongs[i];
+    if (i < 0 || i >= (NSInteger)self.recentSongs.count) return;
+    NERecommendItem *it = self.recentSongs[i];
     // 新歌只有 id，构造一个最简 NESong 交给播放器
     NESong *s = [NESong new];
     s.songID = it.itemID;

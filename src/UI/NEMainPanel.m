@@ -6,6 +6,7 @@
 #import "NEPlayerPage.h"
 #import "NEProfilePage.h"
 #import "NEDiscoverPage.h"
+#import "NESidebar.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabDiscover = 0,   // 推荐/发现
@@ -14,12 +15,13 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabPlayer,
 };
 
-@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate>
+@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate>
 @property (nonatomic, assign) NEPanelTab tab;
 @property (nonatomic, strong) UIView *headerBar;
-@property (nonatomic, strong) NSMutableArray<UIButton *> *tabButtons;
+@property (nonatomic, strong) NESidebar *sidebar;
+@property (nonatomic, strong) UIView *topBar;
+@property (nonatomic, strong) UISearchBar *topSearch;
 @property (nonatomic, strong) UITableView *table;
-@property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UIView *playerBar;
 @property (nonatomic, strong) UILabel *nowTitle;
 @property (nonatomic, strong) UILabel *nowSub;
@@ -96,56 +98,66 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 #pragma mark - 头部
 
 - (void)buildHeader {
-    _headerBar = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.bounds.size.width, 52)];
-    _headerBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [self addSubview:_headerBar];
+    // ---------- 左侧竖排导航 ----------
+    _sidebar = [[NESidebar alloc] initWithFrame:CGRectZero];
+    _sidebar.delegate = self;
 
-    NSArray *titles = @[@"发现", @"我的", @"搜索", @"播放"];
-    _tabButtons = [NSMutableArray array];
-    CGFloat x = 12;
-    for (NSInteger i = 0; i < titles.count; i++) {
-        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        b.tag = i;
-        [b setTitle:titles[i] forState:UIControlStateNormal];
-        b.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-        CGSize fit = [b sizeThatFits:CGSizeMake(200, 30)];
-        b.frame = CGRectMake(x, 12, fit.width + 18, 28);
-        b.layer.cornerRadius = 14;
-        b.layer.cornerCurve = kCACornerCurveContinuous;
-        [b addTarget:self action:@selector(switchTab:) forControlEvents:UIControlEventTouchUpInside];
-        [_headerBar addSubview:b];
-        [_tabButtons addObject:b];
-        x += b.frame.size.width + 8;
+    NESidebarItem *i0 = [NESidebarItem new];
+    i0.title = @"发现"; i0.iconName = @"safari"; i0.iconNameSelected = @"safari.fill"; i0.tag = 0;
+    NESidebarItem *i1 = [NESidebarItem new];
+    i1.title = @"我的"; i1.iconName = @"person"; i1.iconNameSelected = @"person.fill"; i1.tag = 1;
+    NESidebarItem *i2 = [NESidebarItem new];
+    i2.title = @"搜索"; i2.iconName = @"magnifyingglass"; i2.tag = 2;
+    NESidebarItem *i3 = [NESidebarItem new];
+    i3.title = @"播放"; i3.iconName = @"play.circle"; i3.iconNameSelected = @"play.circle.fill"; i3.tag = 3;
+    _sidebar.items = @[i0, i1, i2, i3];
+    _sidebar.selectedIndex = 0;
+    [self addSubview:_sidebar];
+
+    // ---------- 顶栏：搜索框 + 登录 ----------
+    _topBar = [[UIView alloc] initWithFrame:CGRectZero];
+    [self addSubview:_topBar];
+
+    _topSearch = [[UISearchBar alloc] initWithFrame:CGRectZero];
+    _topSearch.placeholder = @"搜索歌曲 / 歌手 / 歌单";
+    _topSearch.delegate = self;
+    _topSearch.searchBarStyle = UISearchBarStyleMinimal;
+    _topSearch.tintColor = NE_BRAND;
+    _topSearch.backgroundImage = [UIImage new];            // 去掉默认边框
+    UITextField *tf = [_topSearch valueForKey:@"searchField"];
+    if ([tf isKindOfClass:[UITextField class]]) {
+        tf.backgroundColor = NE_CARD;
+        tf.layer.cornerRadius = 16;
+        tf.layer.cornerCurve = kCACornerCurveContinuous;
+        tf.textColor = NE_TEXT;
+        tf.attributedPlaceholder = [[NSAttributedString alloc]
+            initWithString:@"搜索歌曲 / 歌手 / 歌单"
+                attributes:@{NSForegroundColorAttributeName: NE_TEXT_DIM}];
     }
+    [_topBar addSubview:_topSearch];
 
     UIButton *login = [UIButton buttonWithType:UIButtonTypeCustom];
     self.loginButton = login;
     [login setTitle:@"登录" forState:UIControlStateNormal];
-    login.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    login.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
     login.backgroundColor = NE_BRAND;
-    login.layer.cornerRadius = 14;
+    login.layer.cornerRadius = 15;
     login.layer.cornerCurve = kCACornerCurveContinuous;
-    login.frame = CGRectMake(self.bounds.size.width - 76, 12, 64, 28);
-    login.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [login addTarget:self action:@selector(showLogin) forControlEvents:UIControlEventTouchUpInside];
-    [_headerBar addSubview:login];
+    [_topBar addSubview:login];
 
     [self highlightTab];
 }
 
-- (void)switchTab:(UIButton *)sender {
-    self.tab = (NEPanelTab)sender.tag;
+- (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
+    self.tab = (NEPanelTab)index;
     [self highlightTab];
-    self.searchBar.hidden = (self.tab != NEPanelTabSearch);
     [self reload];
 }
 
 - (void)highlightTab {
-    for (UIButton *b in self.tabButtons) {
-        BOOL on = (b.tag == self.tab);
-        b.backgroundColor = on ? NE_CARD : UIColor.clearColor;
-        [b setTitleColor:(on ? NE_TEXT : NE_TEXT_DIM) forState:UIControlStateNormal];
-    }
+    self.sidebar.selectedIndex = self.tab;
+    self.topSearch.hidden = (self.tab == NEPanelTabPlayer);
 }
 
 #pragma mark - 列表
@@ -160,33 +172,40 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _table.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     [self addSubview:_table];
 
-    _searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
-    _searchBar.placeholder = @"搜索歌曲 / 歌手";
-    _searchBar.delegate = self;
-    _searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    _searchBar.tintColor = NE_BRAND;
-    _searchBar.hidden = YES;
-    [self addSubview:_searchBar];
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat w = self.bounds.size.width;
-    CGFloat h = self.bounds.size.height;
-    self.headerBar.frame = CGRectMake(0, 0, w, 52);
+    CGFloat W = self.bounds.size.width;
+    CGFloat H = self.bounds.size.height;
 
-    CGFloat top = 52;
-    if (!self.searchBar.hidden) {
-        self.searchBar.frame = CGRectMake(8, top, w - 16, 44);
-        top += 44;
+    // 侧边栏宽度：宽屏 76，窄屏 60
+    BOOL compact = (W < 620);
+    CGFloat sideW = compact ? 60 : 76;
+    if (fabs(self.sidebar.bounds.size.width - sideW) > 0.5) {
+        self.sidebar.compact = compact;
     }
+    self.sidebar.frame = CGRectMake(0, 44, sideW, H - 44);
+
+    CGFloat contentX = sideW;
+    CGFloat contentW = W - sideW;
+
+    // 顶栏
+    self.topBar.frame = CGRectMake(contentX, 8, contentW, 44);
+    CGFloat loginW = 62, gap = 10;
+    self.loginButton.frame = CGRectMake(contentW - loginW - 12, 8, loginW, 30);
+    self.topSearch.frame = CGRectMake(8, 2, contentW - loginW - gap - 16, 40);
+
+    CGFloat top = 58;
     CGFloat playerH = 64;
-    CGRect content = CGRectMake(0, top, w, MAX(0, h - top - playerH));
+    CGRect content = CGRectMake(contentX, top, contentW, MAX(0, H - top - playerH));
+
     self.table.frame = content;
     self.playerPage.frame = content;
     self.profilePage.frame = content;
     self.discoverPage.frame = content;
-    self.playerBar.frame = CGRectMake(0, h - playerH, w, playerH);
+
+    self.playerBar.frame = CGRectMake(0, H - playerH, W, playerH);
     [self layoutPlayerBar];
 }
 
@@ -202,8 +221,11 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     // 发现页自带列表；只有在「看某个歌单的曲目」时才切回 table
     BOOL showTable = isSearch || (isDiscover && self.songs.count > 0 && self.currentPlaylistTitle.length > 0);
     self.table.hidden = !showTable;
-    self.searchBar.hidden = !isSearch;
 
+    // 搜索 tab 直接用 table 展示结果
+    if (isSearch) {
+        self.table.hidden = NO;
+    }
     if (isDiscover) {
         if (showTable) {
             // 展示歌单曲目
@@ -336,6 +358,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 #pragma mark - 搜索
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)bar {
+    if (bar != self.topSearch) return;
     [bar resignFirstResponder];
     NSString *kw = bar.text;
     if (!kw.length) return;
