@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40027296668](https://github.com/Dmawa/netease-music-dylib/actions/runs/40027296668) ✅（三个 job 全绿）
-- 最新版本：v0.6.3（黑胶唱片播放页 / 播放列表 / 循环模式）
+- 最近一次 CI：run [40031325031](https://github.com/Dmawa/netease-music-dylib/actions/runs/40031325031) ✅（三个 job 全绿）
+- 最新版本：v0.6.4（播客/笔记 tab + 播放历史）
 
 ## 设计边界
 
