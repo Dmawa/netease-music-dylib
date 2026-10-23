@@ -20,6 +20,7 @@ Player_FILES = src/NEEntry.m \
                src/UI/NEFloatingBall.m \
                src/UI/NEMainPanel.m \
                src/UI/NEPlayerPage.m \
+               src/UI/NEProfilePage.m \
                src/UI/NELyricView.m \
                src/UI/NEQRCode.m
 

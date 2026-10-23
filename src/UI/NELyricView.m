@@ -157,7 +157,6 @@
 @property (nonatomic, strong, nullable) CADisplayLink *displayLink;
 @property (nonatomic, assign) double anchorTime;        // 最近一次外部给定的时间
 @property (nonatomic, assign) CFTimeInterval anchorAt;  // 该时间对应的机器时刻
-@property (nonatomic, assign) BOOL playing;
 
 @end
 

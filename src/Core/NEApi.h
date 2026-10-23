@@ -25,6 +25,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, copy) NSString *coverURL;
 @property (nonatomic, assign) NSInteger trackCount;
+/// 网易云的特殊歌单标记：5 = 我喜欢的音乐
+@property (nonatomic, assign) NSInteger specialType;
+@property (nonatomic, assign) NSInteger creatorID;
 @end
 
 typedef void (^NEQRCodeBlock)(NSString * _Nullable unikey, NSError * _Nullable error);
@@ -52,8 +55,12 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)searchSongs:(NSString *)keyword limit:(NSInteger)limit complete:(NESongsBlock)complete;
 - (void)fetchPlaylistDetail:(NSString *)playlistID complete:(NESongsBlock)complete;
 - (void)fetchToplist:(NESongsBlock)complete;
-/// 我的歌单（需登录）
+/// 我的歌单（需登录）；返回的列表里含「我喜欢的音乐」
 - (void)fetchMyPlaylists:(void (^)(NSArray<NEPlaylist *> * _Nullable, NSError * _Nullable))complete;
+/// 「我喜欢的音乐」：specialType == 5 的那个歌单，取不到时回调 nil
+- (void)fetchLikedPlaylist:(void (^)(NEPlaylist * _Nullable playlist, NSError * _Nullable error))complete;
+/// 我创建/收藏的歌单（排除年度歌单等特殊类型）
+- (void)fetchMyCollectedPlaylists:(void (^)(NSArray<NEPlaylist *> * _Nullable, NSError * _Nullable))complete;
 - (void)fetchPlaylistSongs:(NSString *)playlistID complete:(NESongsBlock)complete;
 
 #pragma mark 播放

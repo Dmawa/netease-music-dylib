@@ -4,14 +4,16 @@
 #import "NEPlayer.h"
 #import "NEQRCode.h"
 #import "NEPlayerPage.h"
+#import "NEProfilePage.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
-    NEPanelTabDiscover = 0,
+    NEPanelTabDiscover = 0,   // 推荐/发现
+    NEPanelTabProfile,        // 我的（收藏）
     NEPanelTabSearch,
     NEPanelTabPlayer,
 };
 
-@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate>
+@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate>
 @property (nonatomic, assign) NEPanelTab tab;
 @property (nonatomic, strong) UIView *headerBar;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *tabButtons;
@@ -24,6 +26,9 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) UISlider *progress;
 @property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) NEPlayerPage *playerPage;
+@property (nonatomic, strong) NEProfilePage *profilePage;
+/// 当前正在浏览的歌单（用于返回时显示标题）
+@property (nonatomic, copy) NSString *currentPlaylistTitle;
 
 @property (nonatomic, strong) NSArray<NESong *> *songs;
 @property (nonatomic, assign) BOOL loading;
@@ -86,7 +91,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _headerBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [self addSubview:_headerBar];
 
-    NSArray *titles = @[@"发现", @"搜索", @"播放"];
+    NSArray *titles = @[@"发现", @"我的", @"搜索", @"播放"];
     _tabButtons = [NSMutableArray array];
     CGFloat x = 12;
     for (NSInteger i = 0; i < titles.count; i++) {
@@ -169,17 +174,27 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     CGRect content = CGRectMake(0, top, w, MAX(0, h - top - playerH));
     self.table.frame = content;
     self.playerPage.frame = content;
+    self.profilePage.frame = content;
     self.playerBar.frame = CGRectMake(0, h - playerH, w, playerH);
     [self layoutPlayerBar];
 }
 
 - (void)reload {
-    BOOL isPlayer = (self.tab == NEPanelTabPlayer);
-    self.playerPage.hidden = !isPlayer;
-    self.table.hidden = isPlayer;
-    self.searchBar.hidden = (self.tab != NEPanelTabSearch) || isPlayer;
+    BOOL isPlayer  = (self.tab == NEPanelTabPlayer);
+    BOOL isProfile = (self.tab == NEPanelTabProfile);
+    BOOL isSearch  = (self.tab == NEPanelTabSearch);
+
+    self.playerPage.hidden  = !isPlayer;
+    self.profilePage.hidden = !isProfile;
+    self.table.hidden = (isPlayer || isProfile);
+    self.searchBar.hidden = !isSearch;
+
     if (isPlayer) {
         [self.playerPage refresh];
+        return;
+    }
+    if (isProfile) {
+        [self.profilePage reloadData];
         return;
     }
     [self setNeedsLayout];
@@ -238,6 +253,34 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     [self reload];
 }
 
+#pragma mark - NEProfilePageDelegate
+
+- (void)profilePage:(id)page didSelectPlaylist:(NEPlaylist *)playlist {
+    if (!playlist.playlistID.length) return;
+    self.currentPlaylistTitle = playlist.name;
+    // 切回列表视图展示该歌单曲目
+    self.tab = NEPanelTabDiscover;
+    [self highlightTab];
+    self.loading = YES;
+    [self reload];
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchPlaylistSongs:playlist.playlistID complete:^(NSArray<NESong *> *songs, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.loading = NO;
+        if (error) {
+            self.hint = error.localizedDescription;
+            self.songs = @[];
+        } else {
+            self.songs = songs;
+            self.hint = [NSString stringWithFormat:@"%@ · %lu 首",
+                         playlist.name ?: @"歌单", (unsigned long)songs.count];
+        }
+        [self reload];
+    }];
+}
+
 #pragma mark - 搜索
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)bar {
@@ -260,6 +303,11 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _playerPage = [[NEPlayerPage alloc] initWithFrame:CGRectZero];
     _playerPage.hidden = YES;
     [self addSubview:_playerPage];
+
+    _profilePage = [[NEProfilePage alloc] initWithFrame:CGRectZero];
+    _profilePage.hidden = YES;
+    _profilePage.delegate = self;
+    [self addSubview:_profilePage];
 }
 
 #pragma mark - 播放条

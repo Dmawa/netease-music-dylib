@@ -161,14 +161,14 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)fetchMyPlaylists:(void (^)(NSArray<NEPlaylist *> *, NSError *))complete {
+    [self fetchAccount:^(NSString *nickname, NSString *avatar, NSError *error) {}];
     [[NESession shared] GET:@"/api/nuser/account/get" params:nil complete:^(id json, NSError *error) {
         if (error) { complete(nil, error); return; }
         NSNumber *uid = json[@"profile"][@"userId"];
-        if (![uid isKindOfClass:[NSNumber class]]) {
-            complete(@[], nil);
-            return;
-        }
-        NSString *path = [NSString stringWithFormat:@"/api/user/playlist?uid=%@&limit=50&offset=0", uid];
+        if (![uid isKindOfClass:[NSNumber class]]) { complete(@[], nil); return; }
+
+        NSString *path = [NSString stringWithFormat:
+            @"/api/user/playlist?uid=%@&limit=200&offset=0", uid];
         [[NESession shared] GET:path params:nil complete:^(id json2, NSError *error2) {
             if (error2) { complete(nil, error2); return; }
             NSMutableArray *out = [NSMutableArray array];
@@ -179,10 +179,35 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 p.name = d[@"name"] ?: @"";
                 p.coverURL = d[@"coverImgUrl"] ?: @"";
                 p.trackCount = [d[@"trackCount"] integerValue];
+                p.specialType = [d[@"specialType"] integerValue];
+                NSNumber *cid = d[@"creator"][@"userId"];
+                p.creatorID = [cid isKindOfClass:[NSNumber class]] ? cid.integerValue : 0;
                 if (p.playlistID.length) [out addObject:p];
             }
             complete(out, nil);
         }];
+    }];
+}
+
+- (void)fetchLikedPlaylist:(void (^)(NEPlaylist *, NSError *))complete {
+    [self fetchMyPlaylists:^(NSArray<NEPlaylist *> *list, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        for (NEPlaylist *p in list) {
+            if (p.specialType == 5) { complete(p, nil); return; }
+        }
+        complete(nil, nil);
+    }];
+}
+
+- (void)fetchMyCollectedPlaylists:(void (^)(NSArray<NEPlaylist *> *, NSError *))complete {
+    [self fetchMyPlaylists:^(NSArray<NEPlaylist *> *list, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSMutableArray *out = [NSMutableArray array];
+        for (NEPlaylist *p in list) {
+            // 只保留普通歌单（排除「喜欢的音乐」和年度歌单 specialType=20）
+            if (p.specialType == 0) [out addObject:p];
+        }
+        complete(out, nil);
     }];
 }
 
