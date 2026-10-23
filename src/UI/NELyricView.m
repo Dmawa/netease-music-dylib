@@ -149,6 +149,7 @@
 @property (nonatomic, assign) BOOL userDragging;      // 用户正在拖：暂停自动滚动
 @property (nonatomic, assign) NSTimeInterval dragEndAt;
 @property (nonatomic, assign) CGFloat lastLayoutWidth;
+@property (nonatomic, assign) CGFloat lastLayoutHeight;
 @end
 
 @implementation NELyricView
@@ -243,11 +244,15 @@
     self.scroll.frame = self.bounds;
 
     CGFloat w = self.bounds.size.width;
-    if (fabs(w - self.lastLayoutWidth) < 0.5 && self.lineViews.count) {
-        [self scrollToCurrentAnimated:NO];
+    CGFloat h = self.bounds.size.height;
+    // 尺寸没变就不重排：避免每次刷新都做全量文本测量
+    if (fabs(w - self.lastLayoutWidth) < 0.5 &&
+        fabs(h - self.lastLayoutHeight) < 0.5 &&
+        self.lineViews.count) {
         return;
     }
     self.lastLayoutWidth = w;
+    self.lastLayoutHeight = h;
 
     CGFloat pad = 24;
     CGFloat textW = MAX(60, w - pad * 2);

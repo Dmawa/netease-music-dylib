@@ -127,45 +127,54 @@
     CGFloat H = self.bounds.size.height;
     _coverBlur.frame = self.bounds;
 
-    // iPad / 宽屏：封面在左，歌词在右
+    // iPad / 宽屏：左封面 + 右歌词；窄屏：上图下词
     BOOL wide = (W >= 560);
-
-    CGFloat top = 8;
-    CGFloat textBlock = 44;
-    CGFloat bottom = 96;
+    CGFloat bottom = 92;          // 进度 + 控制区高度
+    CGFloat topPad = 10;
 
     if (wide) {
-        CGFloat coverSize = MIN(W * 0.42, H - textBlock - bottom - 24);
-        coverSize = MAX(140, coverSize);
-        _cover.frame = CGRectMake(24, (H - coverSize) / 2 - 10, coverSize, coverSize);
-        CGFloat lyricX = CGRectGetMaxX(_cover.frame) + 20;
-        CGFloat lyricW = W - lyricX - 24;
-        _lyricView.frame = CGRectMake(lyricX, top + 8, lyricW, H - bottom - top - 16);
-        _titleLabel.frame = CGRectMake(24, _lyricView.frame.origin.y + _lyricView.bounds.size.height - 40, W - 48, 20);
-        _artistLabel.frame = CGRectMake(24, _titleLabel.frame.origin.y + 20, W - 48, 16);
-        // 标题覆盖在歌词下方可能冲突，宽屏时把歌曲信息挪到封面上方
-        _titleLabel.frame = CGRectMake(24, CGRectGetMinY(_cover.frame) - 48, W - 48, 20);
-        _artistLabel.frame = CGRectMake(24, CGRectGetMinY(_cover.frame) - 26, W - 48, 16);
+        CGFloat infoH = 46;       // 标题 + 艺术家
+        CGFloat coverSize = MIN(W * 0.38, H - bottom - infoH - 28);
+        coverSize = MAX(120, coverSize);
+
+        _cover.frame = CGRectMake(24, topPad + infoH, coverSize, coverSize);
+
+        _titleLabel.textAlignment = NSTextAlignmentLeft;
+        _artistLabel.textAlignment = NSTextAlignmentLeft;
+        _titleLabel.frame = CGRectMake(24, topPad, coverSize, 22);
+        _artistLabel.frame = CGRectMake(24, topPad + 22, coverSize, 16);
+
+        CGFloat lyricX = CGRectGetMaxX(_cover.frame) + 24;
+        CGFloat lyricW = W - lyricX - 20;
+        CGFloat lyricY = topPad;
+        CGFloat lyricH = H - bottom - topPad - 8;
+        _lyricView.frame = CGRectMake(lyricX, lyricY, lyricW, MAX(80, lyricH));
     } else {
-        CGFloat coverSize = MIN(W - 100, 132);
-        _cover.frame = CGRectMake((W - coverSize) / 2, top + 6, coverSize, coverSize);
-        _titleLabel.frame = CGRectMake(20, CGRectGetMaxY(_cover.frame) + 8, W - 40, 20);
+        CGFloat coverSize = MIN(W - 110, 128);
+        _cover.frame = CGRectMake((W - coverSize) / 2, topPad, coverSize, coverSize);
+
+        _titleLabel.textAlignment = NSTextAlignmentCenter;
+        _artistLabel.textAlignment = NSTextAlignmentCenter;
+        _titleLabel.frame = CGRectMake(20, CGRectGetMaxY(_cover.frame) + 6, W - 40, 20);
         _artistLabel.frame = CGRectMake(20, CGRectGetMaxY(_titleLabel.frame) + 1, W - 40, 16);
+
         CGFloat lyricTop = CGRectGetMaxY(_artistLabel.frame) + 6;
-        _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(40, H - bottom - lyricTop));
+        _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(50, H - bottom - lyricTop));
     }
 
-    CGFloat barY = H - bottom + 6;
+    // 进度条 + 时间
+    CGFloat barY = H - bottom + 2;
     _progress.frame = CGRectMake(20, barY, W - 40, 20);
     _timeNow.frame = CGRectMake(20, barY + 18, 46, 12);
     _timeTotal.frame = CGRectMake(W - 66, barY + 18, 46, 12);
 
+    // 控制按钮
     CGFloat cy = barY + 52;
     CGFloat cx = W / 2;
-    _prevBtn.frame = CGRectMake(cx - 88, cy - 16, 44, 32);
-    _playBtn.frame = CGRectMake(cx - 22, cy - 22, 44, 44);
-    _nextBtn.frame = CGRectMake(cx + 44, cy - 16, 44, 32);
-    _modeBtn.frame = CGRectMake(W - 46, cy - 14, 24, 24);
+    _prevBtn.frame = CGRectMake(cx - 92, cy - 16, 44, 32);
+    _playBtn.frame = CGRectMake(cx - 24, cy - 24, 48, 48);
+    _nextBtn.frame = CGRectMake(cx + 48, cy - 16, 44, 32);
+    _modeBtn.frame = CGRectMake(W - 44, cy - 12, 24, 24);
 }
 
 #pragma mark - 操作
