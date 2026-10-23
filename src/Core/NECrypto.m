@@ -9,10 +9,10 @@ static NSString *const kNEWeapiCharset   = @"abcdefghijklmnopqrstuvwxyz012345678
 
 /// RSA-1024 模数：官方前端 asrsea 里的同一串（已去掉前导 00，正好 128 字节）
 static NSString *const kNEWeapiModulusHex =
-    @"e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b7251522"
-    @"b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecb"
-    @"da92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d"
-    @"813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7";
+    @"e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b72515"
+    @"2b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ec"
+    @"bda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d8"
+    @"13cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7";
 
 @implementation NECrypto
 
