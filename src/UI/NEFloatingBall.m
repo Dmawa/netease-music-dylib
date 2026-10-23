@@ -7,6 +7,7 @@
 @property (nonatomic, strong, nullable) UIView *panelView;
 @property (nonatomic, assign) BOOL expanded;
 @property (nonatomic, assign) CGPoint lastCenter;
+@property (nonatomic, assign) BOOL hasPositioned;
 @end
 
 @implementation NEFloatingBall
@@ -177,11 +178,18 @@
 
 - (void)presentBall {
     self.hidden = NO;
-    if (self.ball.center.x == 0 && self.ball.center.y == 0) {
-        CGRect screen = self.bounds;
-        self.ball.center = CGPointMake(screen.size.width - NE_BALL_SIZE / 2 - 10,
-                                       screen.origin.y + 120);
+    if (self.hasPositioned) return;
+    self.hasPositioned = YES;
+
+    // 默认停在右侧偏上：避开状态栏，也避开右下角的返回手势区
+    CGRect screen = self.bounds;
+    CGFloat w = screen.size.width;
+    CGFloat topSafe = 60.0;
+    if (@available(iOS 11.0, *)) {
+        UIWindow *win = self;
+        topSafe = win.safeAreaInsets.top + 44.0;
     }
+    self.ball.center = CGPointMake(w - NE_BALL_SIZE / 2 - 10, topSafe + NE_BALL_SIZE / 2);
 }
 
 @end

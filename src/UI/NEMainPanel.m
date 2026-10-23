@@ -2,6 +2,7 @@
 #import "NEUITheme.h"
 #import "NEApi.h"
 #import "NEPlayer.h"
+#import "NEQRCode.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabDiscover = 0,
@@ -27,6 +28,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) NSArray<NSDictionary *> *lyricLines;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
+@property (nonatomic, strong, nullable) UIViewController *loginVC;
 
 @end
 
@@ -370,20 +372,19 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
     close.frame = CGRectMake(20, 330, 280, 40);
     [close setTitle:@"关闭" forState:UIControlStateNormal];
-    [close addTarget:vc action:@selector(dismissModalViewControllerAnimated:) forControlEvents:UIControlEventTouchUpInside];
+    [close addTarget:self action:@selector(closeLoginVC) forControlEvents:UIControlEventTouchUpInside];
     [vc.view addSubview:close];
+    self.loginVC = vc;
 
     [[NEApi shared] requestQRKey:^(NSString *unikey, NSError *error) {
         if (!unikey) { status.text = error.localizedDescription; return; }
-        // 网易云二维码图片
-        NSString *img = [NSString stringWithFormat:@"https://music.163.com/login?codekey=%@", unikey];
-        dispatch_async(dispatch_get_global_queue(0, 0), ^{
-            NSData *d = [NSData dataWithContentsOfURL:[NSURL URLWithString:img]];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                qr.image = d ? [UIImage imageWithData:d] : nil;
-                status.text = @"请用网易云 App 扫描上方二维码";
-            });
-        });
+        // 二维码由本地生成：网易云没有可直连的图片接口，
+        // 服务端页面是靠前端 JS 画出来的，所以这里用自带编码器绘制
+        NSString *content = [NSString stringWithFormat:
+            @"https://music.163.com/login?codekey=%@", unikey];
+        UIImage *img = [NEQRCode imageWithText:content size:180];
+        qr.image = img;
+        status.text = img ? @"请用网易云 App 扫描上方二维码" : @"二维码生成失败";
         [self pollLoginWith:unikey status:status];
     }];
 
@@ -392,7 +393,10 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)pollLoginWith:(NSString *)unikey status:(UILabel *)status {
+    // 登录页已被关闭就停止轮询，避免后台无限请求
+    if (!self.loginVC) return;
     [[NEApi shared] pollQRCode:unikey complete:^(NSInteger code, NSString *nickname, NSError *error) {
+        if (!self.loginVC) return;
         if (error) { status.text = error.localizedDescription; return; }
         switch (code) {
             case 800: status.text = @"二维码已过期"; return;
@@ -401,12 +405,20 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
             case 803:
                 status.text = @"登录成功";
                 [self loadAccountThenDiscover];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), ^{ [self closeLoginVC]; });
                 return;
             default:  status.text = [NSString stringWithFormat:@"状态 %ld", (long)code]; break;
         }
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{ [self pollLoginWith:unikey status:status]; });
     }];
+}
+
+- (void)closeLoginVC {
+    UIViewController *vc = self.loginVC;
+    self.loginVC = nil;
+    [vc dismissViewControllerAnimated:YES completion:nil];
 }
 
 #pragma mark - 找到当前最顶层 VC（iOS13 起 keyWindow 不可靠）

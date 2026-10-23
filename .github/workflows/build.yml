@@ -3,11 +3,10 @@ name: build
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
     inputs:
       ipa:
-        description: "可选：要注入的宿主 IPA 的公开下载直链"
+        description: "可选：要注入的宿主 IPA 公开直链（留空则只出空壳 App）"
         required: false
 
 permissions:
@@ -15,19 +14,16 @@ permissions:
 
 jobs:
   dylib:
-    name: build Player.dylib
+    name: Player.dylib
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
-      - name: 环境信息
-        run: |
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-path
-          xcrun --sdk iphoneos --show-sdk-version
+      - name: 环境
+        run: xcodebuild -version && xcrun --sdk iphoneos --show-sdk-version
 
       - name: 编译 arm64 + arm64e
         run: |
+          set -euo pipefail
           SDK=$(xcrun --sdk iphoneos --show-sdk-path)
           mkdir -p out
           SRCS=$(find src -name '*.m' | sort)
@@ -44,51 +40,74 @@ jobs:
               -install_name /usr/lib/Player.dylib \
               -o out/Player.$ARCH.dylib $SRCS
           done
-
-      - name: 合并为 fat 二进制
-        run: |
           lipo -create out/Player.arm64.dylib out/Player.arm64e.dylib -output out/Player.dylib
           lipo -info out/Player.dylib
           otool -L out/Player.dylib
 
-      - name: 自签名（ad-hoc，便于注入后重签）
-        run: |
-          codesign --force --sign - --timestamp=none out/Player.dylib || true
-          codesign -dv out/Player.dylib 2>&1 || true
+      - name: ad-hoc 签名
+        run: codesign --force --sign - --timestamp=none out/Player.dylib && codesign -dv out/Player.dylib 2>&1 || true
 
-      - name: 归档产物
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Player.dylib
           path: out/Player.dylib
           if-no-files-found: error
 
-  inject:
-    name: 注入宿主 IPA
-    needs: dylib
-    if: ${{ github.event.inputs.ipa != '' }}
+  shell:
+    name: 空壳宿主 App
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: 编译空壳 App
+        run: |
+          set -euo pipefail
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          mkdir -p shell/Payload/NEMusicShell.app
+          APP=shell/Payload/NEMusicShell.app
+          cp shell-app/Info.plist "$APP/Info.plist"
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$SDK" \
+            -miphoneos-version-min=13.0 -fobjc-arc \
+            -framework Foundation -framework UIKit \
+            -o "$APP/NEMusicShell" shell-app/Sources/main.m
+          printf 'APPL????' > "$APP/PkgInfo"
+          lipo -info "$APP/NEMusicShell"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shell-app
+          path: shell/
+          if-no-files-found: error
+
+  package:
+    name: 打包 IPA（注入 dylib）
+    needs: [dylib, shell]
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with:
-          name: Player.dylib
-          path: out
+        with: { name: Player.dylib, path: out }
+      - uses: actions/download-artifact@v4
+        with: { name: shell-app, path: shell }
 
-      - name: 下载宿主 IPA
+      - name: 注入并签名
         run: |
-          curl -fL --retry 3 -o host.ipa "${{ github.event.inputs.ipa }}"
-          ls -lh host.ipa
-
-      - name: 注入并重打包
-        run: |
+          set -euo pipefail
           python3 -m pip install --quiet lief
-          python3 scripts/inject.py --ipa host.ipa --dylib out/Player.dylib --out dist
-          ls -lh dist
+          mkdir -p dist
+          cd shell
+          # 直接把 dylib 塞进空壳 App 并加加载指令
+          python3 ../scripts/inject_app.py \
+            --app Payload/NEMusicShell.app \
+            --dylib ../out/Player.dylib
+          cd ..
+          # 重签：先内层 dylib，再整个 .app
+          codesign --force --sign - shell/Payload/NEMusicShell.app/Player.dylib
+          codesign --force --sign - --entitlements scripts/ent.plist shell/Payload/NEMusicShell.app || \
+            codesign --force --sign - shell/Payload/NEMusicShell.app
+          cd shell && zip -qry ../dist/NEMusicShell.ipa Payload && cd ..
+          ls -lh dist/
 
-      - name: 归档注入后的 IPA
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: injected-ipa
+          name: NEMusicShell.ipa
           path: dist/*.ipa
           if-no-files-found: error

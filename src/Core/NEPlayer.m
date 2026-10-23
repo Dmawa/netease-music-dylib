@@ -161,10 +161,11 @@ NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotific
     if (!self.player) {
         self.player = [AVPlayer playerWithPlayerItem:item];
         self.player.actionAtItemEnd = AVPlayerActionAtItemEndPause;
-        [self addPeriodicObserver];
     } else {
         [self.player replaceCurrentItemWithPlayerItem:item];
     }
+    // 每个 item 都要重新挂观察器：上面刚 remove 过，否则切歌后进度不再更新
+    [self addPeriodicObserver];
 
     [[NSNotificationCenter defaultCenter] removeObserver:self name:AVPlayerItemDidPlayToEndTimeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -265,10 +266,11 @@ NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotific
 }
 
 - (void)removeTimeObserver {
-    if (self.timeObserver) {
+    // 注意调用顺序：stop() 中必须先 remove 再释放 player
+    if (self.timeObserver && self.player) {
         [self.player removeTimeObserver:self.timeObserver];
-        self.timeObserver = nil;
     }
+    self.timeObserver = nil;
 }
 
 - (void)notifyState {
