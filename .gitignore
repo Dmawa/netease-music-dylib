@@ -1,0 +1,10 @@
+out/
+dist/
+*.dylib
+*.ipa
+*.o
+*.patched
+obj/
+.theos/
+__pycache__/
+*.pyc

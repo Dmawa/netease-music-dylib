@@ -1,0 +1,93 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      ipa:
+        description: "可选：要注入的宿主 IPA 的公开下载直链"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  dylib:
+    name: build Player.dylib
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: 编译 arm64 + arm64e
+        run: |
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          mkdir -p out
+          SRCS=$(find src -name '*.m' | sort)
+          for ARCH in arm64 arm64e; do
+            echo "==> $ARCH"
+            xcrun --sdk iphoneos clang -arch $ARCH -isysroot "$SDK" \
+              -miphoneos-version-min=13.0 \
+              -fobjc-arc -fblocks -dynamiclib \
+              -I src -I src/Core -I src/UI -I src/Support \
+              -Wall -Wno-unused-parameter -Wno-deprecated-declarations \
+              -framework Foundation -framework UIKit -framework AVFoundation \
+              -framework MediaPlayer -framework QuartzCore -framework CoreGraphics \
+              -install_name /usr/lib/Player.dylib \
+              -o out/Player.$ARCH.dylib $SRCS
+          done
+
+      - name: 合并为 fat 二进制
+        run: |
+          lipo -create out/Player.arm64.dylib out/Player.arm64e.dylib -output out/Player.dylib
+          lipo -info out/Player.dylib
+          otool -L out/Player.dylib
+
+      - name: 自签名（ad-hoc，便于注入后重签）
+        run: |
+          codesign --force --sign - --timestamp=none out/Player.dylib || true
+          codesign -dv out/Player.dylib 2>&1 || true
+
+      - name: 归档产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Player.dylib
+          path: out/Player.dylib
+          if-no-files-found: error
+
+  inject:
+    name: 注入宿主 IPA
+    needs: dylib
+    if: ${{ github.event.inputs.ipa != '' }}
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Player.dylib
+          path: out
+
+      - name: 下载宿主 IPA
+        run: |
+          curl -fL --retry 3 -o host.ipa "${{ github.event.inputs.ipa }}"
+          ls -lh host.ipa
+
+      - name: 注入并重打包
+        run: |
+          python3 -m pip install --quiet lief
+          python3 scripts/inject.py --ipa host.ipa --dylib out/Player.dylib --out dist
+          ls -lh dist
+
+      - name: 归档注入后的 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: injected-ipa
+          path: dist/*.ipa
+          if-no-files-found: error
