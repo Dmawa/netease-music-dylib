@@ -91,7 +91,11 @@ jobs:
       - name: 注入并签名
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet lief
+          # macOS runner 的 Homebrew Python 受 PEP 668 保护，用 venv 安装
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet lief
           mkdir -p dist
           cd shell
           # 直接把 dylib 塞进空壳 App 并加加载指令
