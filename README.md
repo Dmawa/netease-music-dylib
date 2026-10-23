@@ -6,7 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40009734116](https://github.com/Dmawa/netease-music-dylib/actions/runs/40009734116) ✅（三个 job 全绿）
+- 最近一次 CI：run [40011960607](https://github.com/Dmawa/netease-music-dylib/actions/runs/40011960607) ✅（三个 job 全绿）
+- 最新版本：v0.5.1（扫码 8821 修复）
 
 ## 设计边界
 
@@ -102,7 +103,7 @@ python3 scripts/inject.py --ipa 宿主.ipa --dylib Player.dylib --out dist
 4. 打包 IPA，产物 `NEMusicShell.ipa` 可下载。
 
 最近一次产物：`Player.dylib` 1.17 MB（arm64 + arm64e，ad-hoc 已签名），
-`NEMusicShell.ipa` 362 KB。
+`NEMusicShell.ipa` 370 KB。
 本机可复核：
 
 ```bash
@@ -114,8 +115,17 @@ python3 -c "import lief; b=lief.MachO.parse('Player.dylib'); print(b.size, [str(
 所有日志都带前缀，Console.app / Xcode Devices 里过滤即可：
 
 - `[NEMusic]` 注入时机、窗口挂到哪个场景（`浮层窗口已挂到场景 390x844`）
-- `[NELogin]` 扫码轮询状态、803 时的 Set-Cookie、cookie 汇总
+- `[NELogin] poll raw = {...}` 轮询接口的原始响应（含 8821 这类非标准码）
+- `[NELogin]` 状态码、服务端 message、803 时的 Set-Cookie、cookie 汇总
 - `[NEMusic] 获取播放地址失败` 版权/登录导致的取流失败
+
+扫码不成功时的排查顺序：
+
+1. 看登录页状态文字：现在会显示 `<服务端原话>（状态码）`；
+2. 8821 是扫码确认瞬间的临时码，客户端会继续轮询直到 803/800，
+   期间若一直不消失，把 `poll raw` 那几行发出来；
+3. 803 之后仍失败，界面会区分「没收到 Cookie / 缺 MUSIC_U / MUSIC_U 不认」，
+   对应服务端没下发凭证、Cookie 被系统拦下、凭证被判定无效三种情况。
 
 ## 已知限制
 
