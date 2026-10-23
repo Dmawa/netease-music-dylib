@@ -149,7 +149,6 @@
 @property (nonatomic, assign) BOOL userDragging;      // 用户正在拖：暂停自动滚动
 @property (nonatomic, assign) NSTimeInterval dragEndAt;
 @property (nonatomic, assign) CGFloat lastLayoutWidth;
-@property (nonatomic, assign) double currentTime;   // 与头文件 readwrite 对应
 @end
 
 @implementation NELyricView
