@@ -10,6 +10,8 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
 NSString *const NEPlayerQueueChangedNotification = @"NEPlayerQueueChangedNotification";
 
 static NSString *const kNEPlayModeKey = @"NEPlayerPlayMode";
+static NSString *const kNEHistoryKey = @"NEPlayerHistory";
+static NSString *const kNEHistoryIDsKey = @"NEPlayerHistoryIDs";
 
 @interface NEPlayer ()
 @property (nonatomic, strong) AVPlayer *player;
@@ -23,6 +25,7 @@ static NSString *const kNEPlayModeKey = @"NEPlayerPlayMode";
 @property (nonatomic, assign) double pendingSeek;
 /// 上次落盘时间（CACurrentMediaTime）
 @property (nonatomic, assign) CFTimeInterval lastPersistAt;
+@property (nonatomic, strong, readwrite) NSArray<NESong *> *history;
 @end
 
 static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
@@ -40,6 +43,8 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
         _queue = @[];
         _currentIndex = -1;
         _playMode = (NEPlayMode)[[NSUserDefaults standardUserDefaults] integerForKey:kNEPlayModeKey];
+        _history = @[];
+        [self loadHistory];
         [self setupAudioSession];
         [self observeInterruptions];
         [self setupRemoteCommands];
@@ -288,6 +293,41 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
     }];
 }
 
+- (void)recordHistory:(NESong *)song {
+    if (!song.songID.length) return;
+    NSMutableArray *history = [self.history mutableCopy] ?: [NSMutableArray array];
+    NSIndexSet *same = [history indexesOfObjectsPassingTest:^BOOL(NESong *s, NSUInteger idx, BOOL *stop) {
+        return [s.songID isEqualToString:song.songID];
+    }];
+    [history removeObjectsAtIndexes:same];
+    [history insertObject:song atIndex:0];
+    if (history.count > 100) [history removeObjectsInRange:NSMakeRange(100, history.count - 100)];
+    _history = history;
+
+    NSMutableArray *dicts = [NSMutableArray array];
+    for (NESong *s in history) {
+        [dicts addObject:@{@"id": s.songID ?: @"", @"name": s.name ?: @"",
+                           @"artist": s.artist ?: @"", @"cover": s.coverURL ?: @""}];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:dicts forKey:kNEHistoryKey];
+}
+
+- (void)loadHistory {
+    NSArray *dicts = [[NSUserDefaults standardUserDefaults] arrayForKey:kNEHistoryKey];
+    if (![dicts isKindOfClass:[NSArray class]]) return;
+    NSMutableArray *songs = [NSMutableArray array];
+    for (NSDictionary *d in dicts) {
+        if (![d isKindOfClass:[NSDictionary class]]) continue;
+        NESong *s = [NESong new];
+        s.songID = d[@"id"] ?: @"";
+        s.name = d[@"name"] ?: @"";
+        s.artist = d[@"artist"] ?: @"";
+        s.coverURL = d[@"cover"] ?: @"";
+        if (s.songID.length) [songs addObject:s];
+    }
+    _history = songs;
+}
+
 - (void)replaceItemWithURL:(NSURL *)url song:(NESong *)song {
     [self.player pause];
     [self removeTimeObserver];
@@ -307,6 +347,7 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
         selector:@selector(itemDidFinish:)
         name:AVPlayerItemDidPlayToEndTimeNotification object:item];
 
+    [self recordHistory:song];
     [self.player play];
     self.isPlaying = YES;
     self.currentTime = 0;

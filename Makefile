@@ -25,6 +25,7 @@ Player_FILES = src/NEEntry.m \
                src/UI/NEProfilePage.m \
                src/UI/NESettingsPage.m \
                src/UI/NEDiscoverPage.m \
+               src/UI/NEFeedPage.m \
                src/UI/NESidebar.m \
                src/UI/NELoginView.m \
                src/UI/NEWebLogin.m \

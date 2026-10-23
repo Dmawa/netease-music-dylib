@@ -9,14 +9,17 @@
 #import "NESidebar.h"
 #import "NELoginView.h"
 #import "NESettingsPage.h"
+#import "NEFeedPage.h"
 #import "NEImageCache.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabRecommend = 0,  // 推荐（每日推荐/漫游/心动入口 + 搜索结果/歌单）
     NEPanelTabDiscover,       // 发现（排行榜）
     NEPanelTabRoam,           // 漫游（随机推荐）
-    NEPanelTabPlayer,         // 正在播放
+    NEPanelTabPodcast,        // 播客
+    NEPanelTabNotes,          // 笔记
     NEPanelTabProfile,        // 我的（放在最后）
+    NEPanelTabPlayer,         // 正在播放（无侧边栏项，点底部播放条进入）
 };
 
 /// 带封面的内容行：歌曲 / 歌单 / 榜单通用
@@ -103,6 +106,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) NEPlayerPage *playerPage;
 @property (nonatomic, strong) NEProfilePage *profilePage;
 @property (nonatomic, strong) NEDiscoverPage *discoverPage;
+@property (nonatomic, strong) NEFeedPage *podcastPage;
+@property (nonatomic, strong) NEFeedPage *notesPage;
 @property (nonatomic, strong) UIButton *loginButton;
 /// 当前正在浏览的歌单（用于返回时显示标题）
 @property (nonatomic, copy) NSString *currentPlaylistTitle;
@@ -186,10 +191,12 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     NESidebarItem *i2 = [NESidebarItem new];
     i2.title = @"漫游"; i2.iconName = @"infinity"; i2.iconNameSelected = @"infinity"; i2.tag = 2;
     NESidebarItem *i3 = [NESidebarItem new];
-    i3.title = @"播放"; i3.iconName = @"play.circle"; i3.iconNameSelected = @"play.circle.fill"; i3.tag = 3;
+    i3.title = @"播客"; i3.iconName = @"mic"; i3.iconNameSelected = @"mic.fill"; i3.tag = 3;
     NESidebarItem *i4 = [NESidebarItem new];
-    i4.title = @"我的"; i4.iconName = @"person"; i4.iconNameSelected = @"person.fill"; i4.tag = 4;
-    _sidebar.items = @[i0, i1, i2, i3, i4];
+    i4.title = @"笔记"; i4.iconName = @"note.text"; i4.iconNameSelected = @"note.text"; i4.tag = 4;
+    NESidebarItem *i5 = [NESidebarItem new];
+    i5.title = @"我的"; i5.iconName = @"person"; i5.iconNameSelected = @"person.fill"; i5.tag = 5;
+    _sidebar.items = @[i0, i1, i2, i3, i4, i5];
     _sidebar.selectedIndex = 0;
     [self addSubview:_sidebar];
 
@@ -287,6 +294,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.playerPage.frame = content;
     self.profilePage.frame = content;
     self.discoverPage.frame = content;
+    self.podcastPage.frame = content;
+    self.notesPage.frame = content;
 
     self.playerBar.frame = CGRectMake(0, H - playerH, W, playerH);
     self.settingsPage.frame = self.bounds;      // 设置页覆盖整个面板
@@ -297,6 +306,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     BOOL isRecommend = (self.tab == NEPanelTabRecommend);
     BOOL isDiscover  = (self.tab == NEPanelTabDiscover);
     BOOL isRoam      = (self.tab == NEPanelTabRoam);
+    BOOL isPodcast   = (self.tab == NEPanelTabPodcast);
+    BOOL isNotes     = (self.tab == NEPanelTabNotes);
     BOOL isPlayer    = (self.tab == NEPanelTabPlayer);
     BOOL isProfile   = (self.tab == NEPanelTabProfile);
 
@@ -306,7 +317,12 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.playerPage.hidden   = !isPlayer;
     self.profilePage.hidden  = !isProfile;
     self.discoverPage.hidden = !(isRecommend && !showTable);
+    self.podcastPage.hidden  = !isPodcast;
+    self.notesPage.hidden    = !isNotes;
     self.table.hidden        = !showTable;
+
+    if (isPodcast) { [self.podcastPage reload]; return; }
+    if (isNotes) { [self.notesPage reload]; return; }
 
     if (isRecommend && !showTable) {
         [self.discoverPage reloadData];
@@ -590,6 +606,21 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _discoverPage.hidden = YES;
     _discoverPage.delegate = self;
     [self addSubview:_discoverPage];
+
+    // 播客 / 笔记：用 9.6.13 二进制里挖到的接口（参数还在补）
+    _podcastPage = [[NEFeedPage alloc] initWithTitle:@"播客"
+                                                path:@"/api/podcast/rcmd/tab/infinite/blocks/get"
+                                              params:@{@"limit": @10, @"offset": @0}
+                                           arrayKeys:@[@"data.blocks", @"data.list", @"data", @"list"]];
+    _podcastPage.hidden = YES;
+    [self addSubview:_podcastPage];
+
+    _notesPage = [[NEFeedPage alloc] initWithTitle:@"笔记"
+                                              path:@"/api/mlog/feed/bff/app/v1"
+                                            params:@{@"size": @10, @"offset": @0}
+                                         arrayKeys:@[@"data", @"data.list", @"list"]];
+    _notesPage.hidden = YES;
+    [self addSubview:_notesPage];
 }
 
 #pragma mark - 设置页
