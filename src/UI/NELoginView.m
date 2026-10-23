@@ -339,10 +339,27 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             [self finishLogin:nick.length ? nick : nickname];
             return;
         }
-        // 一次都没成功：提示重来，但不再重复轮询
+
+        // Cookie 可能稍晚写入：短暂重试几次，但绝不再去轮询二维码（会触发 8821）
+        if (self.credRetry < 4) {
+            self.credRetry++;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self2 = weakSelf;
+                if (!self2 || self2.stopped) return;
+                [self2 retryConfirmLogin:nickname];
+            });
+            return;
+        }
+
         [self applyState:NELoginStateFailed
-                 message:error.localizedDescription ?: @"登录未完成，请刷新二维码重试"];
+                 message:error.localizedDescription ?: @"未取到登录凭证，请点击刷新重试"];
     }];
+}
+
+/// 只重试「确认登录态」，不重复轮询二维码
+- (void)retryConfirmLogin:(NSString *)nickname {
+    [self handleLoginSuccess:nickname];
 }
 
 - (void)finishLogin:(NSString *)nickname {

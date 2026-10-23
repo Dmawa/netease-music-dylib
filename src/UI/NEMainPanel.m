@@ -212,13 +212,14 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     BOOL isProfile  = (self.tab == NEPanelTabProfile);
     BOOL isDiscover = (self.tab == NEPanelTabDiscover);
 
+    // 搜索结果 / 歌单曲目 用 table 展示时，必须把发现页藏起来，
+    // 否则两个视图会重叠（之前就是这个 bug）
+    BOOL showTable = (isDiscover && self.songs.count > 0);
+
     self.playerPage.hidden   = !isPlayer;
     self.profilePage.hidden  = !isProfile;
-    self.discoverPage.hidden = !isDiscover;
-    // 发现页自带列表；只有在「看某个歌单的曲目」时才切回 table
-    // 搜索结果、歌单曲目都在发现页用 table 展示
-    BOOL showTable = (isDiscover && self.songs.count > 0);
-    self.table.hidden = !showTable;
+    self.discoverPage.hidden = (!isDiscover || showTable);
+    self.table.hidden        = !showTable;
 
     if (isDiscover) {
         if (showTable) {

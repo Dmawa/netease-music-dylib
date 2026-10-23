@@ -27,13 +27,18 @@ static NSString *const kCookieCsrf   = @"__csrf";
         _jar = [NSMutableDictionary dictionary];
         _lock = [NSLock new];
 
+        // 注意：必须保留 HTTPCookieStorage 并允许接收 Cookie。
+        // 之前把它设为 nil / HTTPShouldSetCookies=NO，
+        // 导致 NSURLSession 根本不把 Set-Cookie 写进 allHeaderFields，
+        // 登录成功后 MUSIC_U 永远拿不到 —— 这是登录失效的根因。
         NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
-        cfg.HTTPCookieStorage = nil;
-        cfg.HTTPShouldSetCookies = NO;
-        cfg.timeoutIntervalForRequest = 15;
-        cfg.timeoutIntervalForResource = 30;
+        cfg.HTTPCookieStorage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
+        cfg.HTTPShouldSetCookies = YES;
+        cfg.timeoutIntervalForRequest = 20;
+        cfg.timeoutIntervalForResource = 40;
         cfg.HTTPAdditionalHeaders = @{@"User-Agent": kNEUserAgent};
         cfg.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+        cfg.URLCache = nil;
         _session = [NSURLSession sessionWithConfiguration:cfg
                                  delegate:nil
                             delegateQueue:nil];
@@ -95,18 +100,45 @@ static NSString *const kCookieCsrf   = @"__csrf";
     return [pairs componentsJoinedByString:@"; "];
 }
 
+/// 从系统 Cookie 存储里找（NSURLSession 会把 Set-Cookie 写进去）
+- (NSString *)systemCookieValue:(NSString *)name {
+    NSArray<NSHTTPCookie *> *cookies =
+        [[NSHTTPCookieStorage sharedHTTPCookieStorage] cookies];
+    for (NSHTTPCookie *c in cookies) {
+        if ([c.name isEqualToString:name] &&
+            [c.domain containsString:@"music.163.com"] && c.value.length) {
+            return c.value;
+        }
+    }
+    return nil;
+}
+
 - (BOOL)isLoggedIn {
     [self.lock lock];
     BOOL ok = self.jar[kCookieMusicU].length > 0;
     [self.lock unlock];
-    return ok;
+    if (ok) return YES;
+    // 兜底：系统 Cookie 存储里可能已经有了（首次登录那一次）
+    NSString *v = [self systemCookieValue:kCookieMusicU];
+    if (v.length) {
+        [self setCookie:kCookieMusicU value:v];
+        [self persist];
+        return YES;
+    }
+    return NO;
 }
 
 - (NSString *)valueForCookie:(NSString *)name {
     [self.lock lock];
     NSString *v = self.jar[name];
     [self.lock unlock];
-    return v;
+    if (v.length) return v;
+    NSString *sys = [self systemCookieValue:name];
+    if (sys.length) {
+        [self setCookie:name value:sys];
+        [self persist];
+    }
+    return sys;
 }
 
 /*
@@ -237,6 +269,11 @@ static NSString *const kCookieCsrf   = @"__csrf";
     [req setValue:kNEUserAgent forHTTPHeaderField:@"User-Agent"];
     [req setValue:@"https://music.163.com/" forHTTPHeaderField:@"Referer"];
     [req setValue:@"https://music.163.com" forHTTPHeaderField:@"Origin"];
+
+    // 关键：确保 MUSIC_U 一定在请求头里。
+    // 首次登录时它可能只落在系统 Cookie 存储中，需要通过 valueForCookie 同步过来。
+    [self valueForCookie:kCookieMusicU];
+    [self valueForCookie:kCookieCsrf];
 
     NSString *cookie = [self cookieHeader];
     if (cookie.length) [req setValue:cookie forHTTPHeaderField:@"Cookie"];
