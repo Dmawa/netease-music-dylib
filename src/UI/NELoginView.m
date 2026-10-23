@@ -27,7 +27,6 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 @property (nonatomic, assign) NELoginState state;
 @property (nonatomic, assign) BOOL polling;      // 是否有轮询在飞
 @property (nonatomic, assign) BOOL stopped;
-@property (nonatomic, assign) NSInteger credRetry;
 @end
 
 @implementation NELoginView
@@ -216,7 +215,6 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 - (void)requestNewCode {
     [self applyState:NELoginStateLoading message:@"正在获取二维码…"];
     self.unikey = nil;
-    self.credRetry = 0;
 
     __weak typeof(self) weakSelf = self;
     [[NEApi shared] requestQRKey:^(NSString *unikey, NSError *error) {
@@ -300,13 +298,14 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             }
 
             case 8821:
-                // 风控提示：同一个二维码被重复轮询会触发。
-                // 此时若已拿到凭证，直接按成功处理；否则要求刷新二维码。
+                // 风控：二维码被重复/异常轮询。
+                // 正常流程下不应出现（803 之后我们不再轮询）。
+                NSLog(@"[NELogin] 8821 风控 cookies=%@", [[NESession shared] cookieHeader]);
                 if ([[NEApi shared] isLoggedIn]) {
                     [self handleLoginSuccess:nickname];
                 } else {
                     [self applyState:NELoginStateExpired
-                             message:@"扫码状态已失效，请点击刷新二维码"];
+                             message:@"登录状态异常，请点击刷新二维码重试"];
                 }
                 return;
 
@@ -331,55 +330,48 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 }
 
 - (void)handleLoginSuccess:(NSString *)nickname {
-    // 注意：这里绝对不能再调 poll。
-    // 二维码是一次性的，803 之后重复轮询会触发风控（code 8821）。
-    // 正确做法是直接查账号信息来确认登录态：
-    //  - 成功 -> 服务端返回 profile，同时 MUSIC_U 已在 Set-Cookie 里
-    //  - 失败 -> profile 为 null
-    if ([[NEApi shared] isLoggedIn]) {
-        [self finishLogin:nickname];
-        return;
-    }
-
+    /*
+     *  判定登录成功不能只看 MUSIC_U 是否在本地 jar 里：
+     *  NSURLSession 可能把 Set-Cookie 直接吸收进 HTTPCookieStorage，
+     *  我们的 allHeaderFields 解析拿不到，但会话其实已经生效了。
+     *
+     *  所以这里直接问服务端「我现在是谁」：
+     *    - 返回 profile  -> 登录成功（Cookie 已经生效）
+     *    - profile 为 null -> 没登录成功
+     *
+     *  另外：绝不再去 poll 二维码，那是已经用掉的一次性凭证，
+     *  重复请求只会拿到 8821。
+     */
     [self applyState:NELoginStateWaiting message:@"正在确认登录状态…"];
+
     __weak typeof(self) weakSelf = self;
     [[NEApi shared] fetchAccount:^(NSString *nick, NSString *avatar, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.stopped) return;
 
-        if (nick.length || [[NEApi shared] isLoggedIn]) {
+        BOOL ok = (nick.length > 0) || [[NEApi shared] isLoggedIn];
+        if (ok) {
+            NSLog(@"[NELogin] 登录成功 nickname=%@ loggedIn=%d cookies=%@",
+                  nick, [[NEApi shared] isLoggedIn], [[NESession shared] cookieHeader]);
             [self finishLogin:nick.length ? nick : nickname];
             return;
         }
 
-        // Cookie 可能稍晚写入：短暂重试几次，但绝不再去轮询二维码（会触发 8821）
-        if (self.credRetry < 4) {
-            self.credRetry++;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
-                           dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) self2 = weakSelf;
-                if (!self2 || self2.stopped) return;
-                [self2 retryConfirmLogin:nickname];
-            });
-            return;
+        // 把诊断信息显示在界面上，方便定位（不需要连电脑看日志）
+        NSString *ck = [[NESession shared] cookieHeader];
+        NSLog(@"[NELogin] 803 后仍未登录 error=%@ cookies=%@",
+              error.localizedDescription, ck);
+
+        NSString *hint;
+        if (!ck.length) {
+            hint = @"扫码已确认，但未收到任何 Cookie（服务端未下发凭证）";
+        } else if (![[NESession shared] valueForCookie:@"MUSIC_U"].length) {
+            hint = @"收到 Cookie 但缺少 MUSIC_U，请点击刷新重试";
+        } else {
+            hint = @"已收到 MUSIC_U，但服务端不认，请点击刷新重试";
         }
-
-        [self applyState:NELoginStateFailed
-                 message:error.localizedDescription ?: @"未取到登录凭证，请点击刷新重试"];
+        [self applyState:NELoginStateFailed message:hint];
     }];
-}
-
-/// 只重试「确认登录态」，不重复轮询二维码
-- (void)retryConfirmLogin:(NSString *)nickname {
-    [self handleLoginSuccess:nickname];
-}
-
-- (void)finishLogin:(NSString *)nickname {
-    [self stop];                    // 立刻停止轮询，避免后续误触发
-    [self applyState:NELoginStateSuccess message:@"登录成功"];
-    if ([self.delegate respondsToSelector:@selector(loginViewDidLogin:nickname:)]) {
-        [self.delegate loginViewDidLogin:self nickname:nickname];
-    }
 }
 
 - (void)cancelTapped {
