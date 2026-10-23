@@ -48,6 +48,7 @@
 @property (nonatomic, copy) NSString *coverURLString;
 @property (nonatomic, copy) NSString *likedSongID;
 @property (nonatomic, assign) NSInteger commentTotal;
+@property (nonatomic, assign) NSInteger likeCount;
 @property (nonatomic, strong, nullable) UIViewController *commentsVC;
 @end
 
@@ -329,9 +330,24 @@
 - (void)onTrack {
     self.likedSongID = nil;
     self.commentTotal = 0;
+    self.likeCount = 0;
     [self loadLyricForCurrentSong];
     [self loadCommentCount];
+    [self loadLikeState];
     [self refresh];
+}
+
+- (void)loadLikeState {
+    NESong *song = [NEPlayer shared].currentSong;
+    if (!song.songID.length || ![[NEApi shared] isLoggedIn]) return;
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchSongLikeState:song.songID complete:^(NSInteger count, BOOL liked, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || error) return;
+        self.likeCount = count;
+        if (liked) self.likedSongID = song.songID;
+        [self updateLikeButton];
+    }];
 }
 
 - (void)onProgress {
@@ -395,11 +411,21 @@
     [_loopBtn setImage:[UIImage systemImageNamed:symbol] forState:UIControlStateNormal];
 }
 
+- (NSString *)formatCount:(NSInteger)n {
+    if (n <= 0) return @"";
+    if (n >= 10000) return [NSString stringWithFormat:@"%.1f万", n / 10000.0];
+    return [NSString stringWithFormat:@"%ld", (long)n];
+}
+
 - (void)updateLikeButton {
     BOOL liked = self.likedSongID.length &&
         [self.likedSongID isEqualToString:[NEPlayer shared].currentSong.songID];
-    [_likeBtn setTitle:(liked ? @"♥" : @"♡") forState:UIControlStateNormal];
+    NSString *count = [self formatCount:self.likeCount];
+    NSString *title = liked ? @"♥" : @"♡";
+    if (count.length) title = [title stringByAppendingFormat:@" %@", count];
+    [_likeBtn setTitle:title forState:UIControlStateNormal];
     [_likeBtn setTitleColor:(liked ? NE_BRAND : NE_TEXT) forState:UIControlStateNormal];
+    _likeBtn.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
 }
 
 #pragma mark - 黑胶旋转
@@ -564,6 +590,7 @@
             return;
         }
         self.likedSongID = willLike ? song.songID : nil;
+        self.likeCount = MAX(0, self.likeCount + (willLike ? 1 : -1));
         [self updateLikeButton];
     }];
 }

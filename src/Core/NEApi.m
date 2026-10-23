@@ -452,16 +452,29 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)fetchSongLikeState:(NSString *)songID
+                  complete:(void (^)(NSInteger, BOOL, NSError *))complete {
+    if (!songID.length) { complete(0, NO, nil); return; }
+    [[NESession shared] GET:@"/api/song/like/get" params:@{@"id": songID}
+                  complete:^(id json, NSError *error) {
+        if (error) { complete(0, NO, error); return; }
+        NSDictionary *data = [json[@"data"] isKindOfClass:[NSDictionary class]] ? json[@"data"] : json;
+        NSInteger count = [data[@"likedCount"] integerValue];
+        BOOL liked = [data[@"liked"] boolValue];
+        complete(count, liked, nil);
+    }];
+}
+
 - (void)likeSongID:(NSString *)songID liked:(BOOL)liked complete:(void (^)(BOOL, NSError *))complete {
     if (![self isLoggedIn]) {
         complete(NO, [NSError errorWithDomain:@"NEMusic" code:-31
                                     userInfo:@{NSLocalizedDescriptionKey: @"请先登录"}]);
         return;
     }
-    NSString *path = [NSString stringWithFormat:
-        @"/api/radio/like?alg=itembased&trackId=%@&like=%@&time=3",
-        songID, liked ? @"true" : @"false"];
-    [[NESession shared] POST:path params:nil complete:^(id json, NSError *error) {
+    NSString *path = @"/api/song/like/change";
+    [[NESession shared] GET:path
+                     params:@{@"id": songID, @"like": liked ? @"true" : @"false"}
+                   complete:^(id json, NSError *error) {
         if (error) { complete(NO, error); return; }
         NSInteger code = [json[@"code"] integerValue];
         if (code == 200) { complete(YES, nil); return; }

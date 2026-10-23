@@ -117,6 +117,10 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
                       complete:(void (^)(NSArray<NSDictionary *> * _Nullable comments,
                                          NSInteger total,
                                          NSError * _Nullable error))complete;
+/// 歌曲喜欢状态与总数（/api/song/like/get，需要登录）
+- (void)fetchSongLikeState:(NSString *)songID
+                  complete:(void (^)(NSInteger likedCount, BOOL liked,
+                                     NSError * _Nullable error))complete;
 /// 喜欢 / 取消喜欢一首歌（需要登录）
 - (void)likeSongID:(NSString *)songID
              liked:(BOOL)liked
