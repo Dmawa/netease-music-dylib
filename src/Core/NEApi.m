@@ -86,7 +86,10 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 #pragma mark - 登录
 
 - (void)requestQRKey:(NEQRCodeBlock)complete {
-    [[NESession shared] POST:@"/api/login/qrcode/unikey?type=1" params:nil complete:^(id json, NSError *error) {
+    // 与官方一致：type 放在 POST body 里（官方 js 用 {type:1}）
+    [[NESession shared] POST:@"/api/login/qrcode/unikey"
+                      params:@{@"type": @1}
+                    complete:^(id json, NSError *error) {
         if (error) { complete(nil, error); return; }
         NSString *key = json[@"unikey"];
         if ([key isKindOfClass:[NSString class]] && key.length) complete(key, nil);
@@ -115,13 +118,20 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     [[NESession shared] POST:@"/api/login/qrcode/client/login"
                       params:@{@"key": unikey ?: @"", @"type": @1}
                     complete:^(id json, NSError *error) {
-        if (error) { complete(-1, nil, nil, error); return; }
+        if (error) { complete(-1, nil, nil, nil, error); return; }
+
+        // 原始响应全量打日志：出现 8821 这类非标准状态码时能直接看到服务端说法
+        if ([json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"[NELogin] poll raw = %@", json);
+        }
 
         NSInteger code = -1;
         if ([json isKindOfClass:[NSDictionary class]]) {
             code = [json[@"code"] integerValue];
         }
         NSString *nick = [json isKindOfClass:[NSDictionary class]] ? json[@"nickname"] : nil;
+        NSString *message = [json isKindOfClass:[NSDictionary class]] ? json[@"message"] : nil;
+        if (![message isKindOfClass:[NSString class]]) message = nil;
         NSArray *raw = [NESession shared].rawSetCookieLines ?: @[];
 
         // 803 时服务端会下发 MUSIC_U。这里再兜底检查一次：
@@ -144,7 +154,7 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 }
             }
         }
-        complete(code, nick, raw, nil);
+        complete(code, nick, raw, message, nil);
     }];
 }
 
@@ -174,7 +184,8 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)fetchAccount:(void (^)(NSString *, NSString *, NSError *))complete {
-    [[NESession shared] GET:@"/api/nuser/account/get" params:nil complete:^(id json, NSError *error) {
+    // 官方登录成功后查的是 /api/w/nuser/account/get
+    [[NESession shared] GET:@"/api/w/nuser/account/get" params:nil complete:^(id json, NSError *error) {
         if (error) { complete(nil, nil, error); return; }
         NSDictionary *profile = json[@"profile"];
         if (![profile isKindOfClass:[NSDictionary class]]) { complete(nil, nil, nil); return; }

@@ -25,8 +25,11 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 
 @property (nonatomic, copy, nullable) NSString *unikey;
 @property (nonatomic, assign) NELoginState state;
-@property (nonatomic, assign) BOOL polling;      // 是否有轮询在飞
+/// 每换一次二维码 +1；旧请求/旧定时器的回调据此整条作废
+@property (nonatomic, assign) NSUInteger generation;
 @property (nonatomic, assign) BOOL stopped;
+
+- (void)confirmLoginWithNickname:(nullable NSString *)nickname attempt:(NSInteger)attempt;
 @end
 
 @implementation NELoginView
@@ -209,7 +212,7 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 
 - (void)stop {
     self.stopped = YES;
-    self.polling = NO;
+    self.generation += 1;      // 在飞的请求与定时器全部作废
     self.unikey = nil;
 }
 
@@ -219,16 +222,18 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 }
 
 - (void)requestNewCode {
-    // 刷新/重登时要把 stop 留下的标记清掉，否则新二维码不会开始轮询
+    // 刷新/重登：作废旧 generation，旧请求的响应会被丢弃
     self.stopped = NO;
-    self.polling = NO;
+    self.generation += 1;
+    const NSUInteger gen = self.generation;
+
     [self applyState:NELoginStateLoading message:@"正在获取二维码…"];
     self.unikey = nil;
 
     __weak typeof(self) weakSelf = self;
     [[NEApi shared] requestQRKey:^(NSString *unikey, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || self.stopped) return;
+        if (!self || self.stopped || gen != self.generation) return;
 
         if (!unikey.length) {
             [self applyState:NELoginStateFailed
@@ -250,91 +255,78 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             return;
         }
         [self applyState:NELoginStateWaiting message:@"请使用网易云 App 扫码"];
-        [self poll];
+        [self pollWithGeneration:gen delay:0];
     }];
 }
 
-- (void)poll {
-    if (self.stopped || !self.unikey.length) return;
-    if (self.polling) return;                  // 防重入
-    self.polling = YES;
+/// 单个轮询；每次响应结束后自己排队下一次。gen 变化（换码/关闭）即整条链作废
+- (void)pollWithGeneration:(NSUInteger)gen delay:(NSTimeInterval)delay {
+    if (self.stopped || gen != self.generation || !self.unikey.length) return;
 
     NSString *key = self.unikey;
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] pollQRCodeDetail:key complete:^(NSInteger code, NSString *nickname,
-                                                    NSArray<NSString *> *setCookieLines,
-                                                    NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || self.stopped) return;
-        self.polling = NO;
-
-        // 期间换了 unikey 就丢弃旧结果
-        if (![self.unikey isEqualToString:key]) return;
-
-        if (code == 803) {
-            NSLog(@"[NELogin] 803 Set-Cookie lines = %@", setCookieLines);
-        }
-
-        if (error) {
-            // 网络抖动不立刻判死，继续重试几次
-            [self applyState:NELoginStateWaiting message:error.localizedDescription];
-            [self schedulePoll:2.0];
-            return;
-        }
-
-        NSLog(@"[NELogin] poll code=%ld loggedIn=%d cookies=%@",
-              (long)code, [[NEApi shared] isLoggedIn],
-              [[NESession shared] cookieHeader]);
-
-        switch (code) {
-            case 800:   // 过期
-                [self applyState:NELoginStateExpired message:@"二维码已过期，请点击刷新"];
-                return;
-
-            case 801:   // 等待扫码
-                [self applyState:NELoginStateWaiting message:@"请使用网易云 App 扫码"];
-                [self schedulePoll:1.5];
-                return;
-
-            case 802:   // 已扫码待确认
-                [self applyState:NELoginStateScanned message:@"已扫码，请在手机上确认"];
-                [self schedulePoll:1.2];
-                return;
-
-            case 803: { // 成功
-                [self handleLoginSuccess:nickname];
-                return;
-            }
-
-            case 8821:
-                // 风控：二维码被重复/异常轮询。
-                // 正常流程下不应出现（803 之后我们不再轮询）。
-                NSLog(@"[NELogin] 8821 风控 cookies=%@", [[NESession shared] cookieHeader]);
-                if ([[NEApi shared] isLoggedIn]) {
-                    [self handleLoginSuccess:nickname];
-                } else {
-                    [self applyState:NELoginStateExpired
-                             message:@"登录状态异常，请点击刷新二维码重试"];
-                }
-                return;
-
-            default:
-                [self applyState:NELoginStateWaiting
-                         message:[NSString stringWithFormat:@"状态 %ld，继续等待…", (long)code]];
-                [self schedulePoll:1.5];
-                return;
-        }
-    }];
-}
-
-- (void)schedulePoll:(NSTimeInterval)delay {
-    if (self.stopped) return;
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || self.stopped) return;
-        [self poll];
+        if (!self || self.stopped || gen != self.generation) return;
+        if (![self.unikey isEqualToString:key]) return;   // 期间换了码
+
+        [[NEApi shared] pollQRCodeDetail:key complete:^(NSInteger code, NSString *nickname,
+                                                        NSArray<NSString *> *setCookieLines,
+                                                        NSString *message,
+                                                        NSError *error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self || self.stopped || gen != self.generation) return;
+
+            if (error) {
+                // 网络抖动不判死，继续重试
+                [self applyState:NELoginStateWaiting message:error.localizedDescription];
+                [self pollWithGeneration:gen delay:2.0];
+                return;
+            }
+
+            NSLog(@"[NELogin] poll code=%ld message=%@ loggedIn=%d cookies=%@",
+                  (long)code, message, [[NEApi shared] isLoggedIn],
+                  [[NESession shared] cookieHeader]);
+
+            if (code == 803) {
+                NSLog(@"[NELogin] 803 Set-Cookie lines = %@", setCookieLines);
+                [self handleLoginSuccess:nickname];
+                return;
+            }
+            if (code == 800) {
+                [self applyState:NELoginStateExpired message:@"二维码已过期，请点击刷新"];
+                return;
+            }
+            if (code == 802) {
+                [self applyState:NELoginStateScanned message:@"已扫码，请在手机上确认"];
+                [self pollWithGeneration:gen delay:1.0];
+                return;
+            }
+            if (code == 801) {
+                [self applyState:NELoginStateWaiting message:@"请使用网易云 App 扫码"];
+                [self pollWithGeneration:gen delay:1.0];
+                return;
+            }
+
+            /*
+             *  其他状态码（典型是 8821）：
+             *  官方 web 的 switch 只处理 800/801/802/803，default 直接忽略并继续轮询。
+             *  8821 多是扫码确认瞬间的临时状态，继续轮询通常能等到 803；
+             *  之前把它当终止状态，用户就直接卡在「登录状态异常」了。
+             */
+            NSLog(@"[NELogin] 未知状态码 %ld message=%@（官方前端同样继续轮询）",
+                  (long)code, message);
+            if ([[NEApi shared] isLoggedIn]) {          // 凭证其实已经下发
+                [self handleLoginSuccess:nickname];
+                return;
+            }
+            // 把服务端原话显示出来，方便定位（拿不到就说「等待手机确认」）
+            NSString *hint = message.length ? message : @"等待手机确认…";
+            [self applyState:NELoginStateWaiting
+                     message:[NSString stringWithFormat:@"%@（%ld）", hint, (long)code]];
+            [self pollWithGeneration:gen delay:2.0];
+        }];
     });
 }
 
@@ -348,11 +340,13 @@ typedef NS_ENUM(NSInteger, NELoginState) {
      *    - 返回 profile  -> 登录成功（Cookie 已经生效）
      *    - profile 为 null -> 没登录成功
      *
-     *  另外：绝不再去 poll 二维码，那是已经用掉的一次性凭证，
-     *  重复请求只会拿到 8821。
+     *  另外：绝不再去 poll 二维码，那是已经用掉的一次性凭证。
      */
     [self applyState:NELoginStateWaiting message:@"正在确认登录状态…"];
+    [self confirmLoginWithNickname:nickname attempt:1];
+}
 
+- (void)confirmLoginWithNickname:(NSString *)nickname attempt:(NSInteger)attempt {
     __weak typeof(self) weakSelf = self;
     [[NEApi shared] fetchAccount:^(NSString *nick, NSString *avatar, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
@@ -363,6 +357,18 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             NSLog(@"[NELogin] 登录成功 nickname=%@ loggedIn=%d cookies=%@",
                   nick, [[NEApi shared] isLoggedIn], [[NESession shared] cookieHeader]);
             [self finishLogin:nick.length ? nick : nickname];
+            return;
+        }
+
+        // 803 之后 Cookie 可能晚一拍才生效，重试几次再判失败
+        if (attempt < 3) {
+            NSLog(@"[NELogin] 第 %ld 次确认未拿到 profile，稍后重试", (long)attempt);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self || self.stopped) return;
+                [self confirmLoginWithNickname:nickname attempt:attempt + 1];
+            });
             return;
         }
 

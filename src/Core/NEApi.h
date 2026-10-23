@@ -46,6 +46,7 @@ typedef void (^NEPollBlock)(NSInteger code, NSString * _Nullable nickname, NSErr
 /// 轮询回调的扩展版：同时回传响应里的原始 Set-Cookie 行（便于确认 MUSIC_U）
 typedef void (^NEPollDetailBlock)(NSInteger code, NSString * _Nullable nickname,
                                   NSArray<NSString *> * _Nullable setCookieLines,
+                                  NSString * _Nullable message,
                                   NSError * _Nullable error);
 typedef void (^NESongsBlock)(NSArray<NESong *> * _Nullable songs, NSError * _Nullable error);
 typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable error);
