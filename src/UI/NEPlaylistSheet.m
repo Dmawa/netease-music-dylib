@@ -117,9 +117,10 @@
                            song.name ?: @""];
     cell.textLabel.textColor = current ? NE_BRAND : NE_TEXT;
     cell.detailTextLabel.text = song.artist ?: @"";
-    cell.accessoryView.tag = ip.row;
-    [cell.accessoryView removeTarget:self action:@selector(removeTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [cell.accessoryView addTarget:self action:@selector(removeTapped:) forControlEvents:UIControlEventTouchUpInside];
+    UIButton *removeBtn = (UIButton *)cell.accessoryView;
+    removeBtn.tag = ip.row;
+    [removeBtn removeTarget:self action:@selector(removeTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [removeBtn addTarget:self action:@selector(removeTapped:) forControlEvents:UIControlEventTouchUpInside];
     return cell;
 }
 

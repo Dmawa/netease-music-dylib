@@ -337,8 +337,8 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 
     // 单曲循环
     if (self.playMode == NEPlayModeSingleLoop) {
-        [self.player seekTo:CMTimeMakeWithSeconds(0, NSEC_PER_SEC)
-            toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+        [self.player seekToTime:CMTimeMakeWithSeconds(0, NSEC_PER_SEC)
+                toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
         [self.player play];
         self.isPlaying = YES;
         self.currentTime = 0;

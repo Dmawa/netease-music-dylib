@@ -424,8 +424,8 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 - (void)fetchCommentsForSongID:(NSString *)songID limit:(NSInteger)limit
                          complete:(void (^)(NSArray<NSDictionary *> *, NSInteger, NSError *))complete {
     if (!songID.length) {
-        complete(nil, [NSError errorWithDomain:@"NEMusic" code:-30
-                                     userInfo:@{NSLocalizedDescriptionKey: @"歌曲 ID 为空"}]);
+        complete(nil, 0, [NSError errorWithDomain:@"NEMusic" code:-30
+                                          userInfo:@{NSLocalizedDescriptionKey: @"歌曲 ID 为空"}]);
         return;
     }
     NSString *path = [NSString stringWithFormat:
