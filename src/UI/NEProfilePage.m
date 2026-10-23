@@ -266,17 +266,33 @@
         self.statsLabel.text = [NSString stringWithFormat:@"关注 %@ · 粉丝 %@ · Lv.%@ · 听歌 —",
                                 follows ?: @"—", followeds ?: @"—", level ?: @"—"];
 
-        // 听歌量需要额外接口
+        // 9.6.13 的「我的」头部接口：关注/粉丝/等级/听歌量一次给全
         NSNumber *uid = profile[@"userId"];
         if (uid) {
-            [[NEApi shared] fetchUserDetailWithUID:[uid description]
-                                         complete:^(NSInteger level, NSInteger listenSongs, NSError *err) {
+            NSString *uidText = [uid description];
+            [[NEApi shared] fetchMineHeaderWithUserID:uidText
+                                            complete:^(NSDictionary *header, NSError *err) {
                 __strong typeof(weakSelf) self = weakSelf;
                 if (!self) return;
+                if (![header isKindOfClass:[NSDictionary class]]) {
+                    // 兜底：老接口
+                    [[NEApi shared] fetchUserDetailWithUID:uidText
+                                                 complete:^(NSInteger level, NSInteger listenSongs, NSError *e2) {
+                        __strong typeof(weakSelf) self2 = weakSelf;
+                        if (!self2) return;
+                        self2.statsLabel.text = [NSString stringWithFormat:
+                            @"关注 %@ · 粉丝 %@ · Lv.%ld · 听歌 %ld 首",
+                            follows ?: @"—", followeds ?: @"—", (long)level, (long)listenSongs];
+                    }];
+                    return;
+                }
+                NSString *follow = header[@"followText"] ?: (follows ? [follows description] : @"—");
+                NSString *fans = header[@"followedText"] ?: (followeds ? [followeds description] : @"—");
+                NSString *lv = header[@"levelText"] ?: (level ? [NSString stringWithFormat:@"Lv.%@", level] : @"—");
+                NSNumber *listen = header[@"listenSongs"];
                 self.statsLabel.text = [NSString stringWithFormat:
-                    @"关注 %@ · 粉丝 %@ · Lv.%ld · 听歌 %ld 首",
-                    follows ?: @"—", followeds ?: @"—",
-                    (long)level, (long)listenSongs];
+                    @"关注 %@ · 粉丝 %@ · %@ · 听歌 %@ 首",
+                    follow, fans, lv, listen ?: @"—"];
             }];
         }
     }];

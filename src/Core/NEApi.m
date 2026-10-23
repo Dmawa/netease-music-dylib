@@ -471,6 +471,19 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)fetchMineHeaderWithUserID:(NSString *)uid
+                         complete:(void (^)(NSDictionary *, NSError *))complete {
+    if (!uid.length) { complete(nil, nil); return; }
+    NSDictionary *params = @{@"isVisitor": @"false", @"userId": uid};
+    [[NESession shared] GET:@"/api/mine/rn/header/info/get" params:params
+                  complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSDictionary *header = json[@"data"][@"headerInfo"];
+        if ([header isKindOfClass:[NSDictionary class]]) complete(header, nil);
+        else complete(nil, nil);
+    }];
+}
+
 - (void)fetchUserDetailWithUID:(NSString *)uid
                       complete:(void (^)(NSInteger, NSInteger, NSError *))complete {
     if (!uid.length) { complete(0, 0, nil); return; }

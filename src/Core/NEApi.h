@@ -121,6 +121,10 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)likeSongID:(NSString *)songID
              liked:(BOOL)liked
           complete:(void (^)(BOOL ok, NSError * _Nullable error))complete;
+/// 「我的」页头部（followText/followedText/levelText/listenSongs 等）
+- (void)fetchMineHeaderWithUserID:(NSString *)uid
+                         complete:(void (^)(NSDictionary * _Nullable header,
+                                            NSError * _Nullable error))complete;
 /// 用户详情：等级 + 听歌量（匿名可读）
 - (void)fetchUserDetailWithUID:(NSString *)uid
                       complete:(void (^)(NSInteger level, NSInteger listenSongs,

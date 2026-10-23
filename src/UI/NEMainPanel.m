@@ -610,7 +610,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     // 播客 / 笔记：用 9.6.13 二进制里挖到的接口（参数还在补）
     _podcastPage = [[NEFeedPage alloc] initWithTitle:@"播客"
                                                 path:@"/api/podcast/rcmd/tab/infinite/blocks/get"
-                                              params:@{@"limit": @10, @"offset": @0}
+                                              params:@{@"pageCode": @"PODCAST_TAB_V2",
+                                                       @"subParams": @"{}"}
                                            arrayKeys:@[@"data.blocks", @"data.list", @"data", @"list"]];
     _podcastPage.hidden = YES;
     [self addSubview:_podcastPage];
