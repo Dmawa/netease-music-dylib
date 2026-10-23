@@ -1,6 +1,8 @@
 #import "NEPlayer.h"
 #import <MediaPlayer/MediaPlayer.h>
 #import <AVFoundation/AVFoundation.h>
+#import <UIKit/UIKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 NSString *const NEPlayerStateChangedNotification = @"NEPlayerStateChangedNotification";
 NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotification";
@@ -14,7 +16,13 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
 @property (nonatomic, assign, readwrite) BOOL isPlaying;
 @property (nonatomic, assign, readwrite) double currentTime;
 @property (nonatomic, assign, readwrite) double duration;
+/// 恢复播放用：解析到 URL 后要 seek 到的位置
+@property (nonatomic, assign) double pendingSeek;
+/// 上次落盘时间（CACurrentMediaTime）
+@property (nonatomic, assign) CFTimeInterval lastPersistAt;
 @end
+
+static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 
 @implementation NEPlayer
 
@@ -31,8 +39,77 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
         [self setupAudioSession];
         [self observeInterruptions];
         [self setupRemoteCommands];
+
+        // 退到后台/被杀之前把当前队列和进度存下来，下次启动恢复
+        NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+        [nc addObserver:self selector:@selector(persistState)
+                   name:UIApplicationDidEnterBackgroundNotification object:nil];
+        [nc addObserver:self selector:@selector(persistState)
+                   name:UIApplicationWillTerminateNotification object:nil];
+
+        [self restoreState];
     }
     return self;
+}
+
+#pragma mark - 状态持久化
+
+- (void)persistState {
+    if (!self.queue.count) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kNEPlayerStateKey];
+        return;
+    }
+    NSMutableArray *songs = [NSMutableArray array];
+    for (NESong *s in self.queue) {
+        [songs addObject:@{
+            @"id": s.songID ?: @"",
+            @"name": s.name ?: @"",
+            @"artist": s.artist ?: @"",
+            @"album": s.album ?: @"",
+            @"cover": s.coverURL ?: @"",
+            @"duration": @(s.durationMs),
+        }];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:@{
+        @"queue": songs,
+        @"index": @(self.currentIndex),
+        @"time": @(self.currentTime),
+    } forKey:kNEPlayerStateKey];
+}
+
+- (void)restoreState {
+    NSDictionary *state = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kNEPlayerStateKey];
+    if (![state isKindOfClass:[NSDictionary class]]) return;
+
+    NSArray *raw = state[@"queue"];
+    if (![raw isKindOfClass:[NSArray class]] || !raw.count) return;
+
+    NSMutableArray<NESong *> *songs = [NSMutableArray array];
+    for (NSDictionary *d in raw) {
+        if (![d isKindOfClass:[NSDictionary class]]) continue;
+        NESong *s = [NESong new];
+        s.songID = d[@"id"] ?: @"";
+        s.name = d[@"name"] ?: @"";
+        s.artist = d[@"artist"] ?: @"";
+        s.album = d[@"album"] ?: @"";
+        s.coverURL = d[@"cover"] ?: @"";
+        s.durationMs = [d[@"duration"] integerValue];
+        if (s.songID.length) [songs addObject:s];
+    }
+    if (!songs.count) return;
+
+    self.queue = songs;
+    NSInteger idx = [state[@"index"] integerValue];
+    self.currentIndex = MAX(0, MIN(idx, (NSInteger)songs.count - 1));
+    self.currentTime = MAX(0, [state[@"time"] doubleValue]);
+    self.duration = self.currentSong.durationMs > 0 ? self.currentSong.durationMs / 1000.0 : 0;
+
+    NSLog(@"[NEMusic] 恢复上次播放：%@（%.0f 秒）", self.currentSong.name, self.currentTime);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerTrackChangedNotification object:self];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerProgressNotification object:self];
+    });
 }
 
 #pragma mark - 音频会话
@@ -183,6 +260,16 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
     self.currentTime = 0;
     self.duration = song.durationMs > 0 ? song.durationMs / 1000.0 : 0;
 
+    // 从上次退出恢复的曲目：解析到地址后回到原来的进度
+    if (self.pendingSeek > 0.5) {
+        double seek = self.pendingSeek;
+        self.pendingSeek = 0;
+        [self.player seekToTime:CMTimeMakeWithSeconds(seek, NSEC_PER_SEC)
+                toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+        self.currentTime = seek;
+    }
+    [self persistState];
+
     [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerTrackChangedNotification object:self];
     [self notifyState];
     [self updateNowPlaying];
@@ -208,7 +295,13 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
 }
 
 - (void)togglePlayPause {
-    if (!self.player) return;
+    if (!self.currentSong) return;
+    if (!self.player || !self.player.currentItem) {
+        // 上次退出时恢复出来的队列还没有真正的播放器：重新解析地址再播
+        self.pendingSeek = self.currentTime;
+        [self loadCurrentAndPlay];
+        return;
+    }
     if (self.isPlaying) {
         [self.player pause];
         self.isPlaying = NO;
@@ -238,6 +331,7 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
     CMTime t = CMTimeMakeWithSeconds(seconds, NSEC_PER_SEC);
     [self.player seekToTime:t toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
     self.currentTime = seconds;
+    [self persistState];
     [self notifyState];
     [self updateNowPlaying];
 }
@@ -252,6 +346,7 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
     self.currentTime = 0;
     self.duration = 0;
     [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kNEPlayerStateKey];
     [self notifyState];
 }
 
@@ -269,6 +364,12 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
         if (CMTIME_IS_NUMERIC(dur)) {
             double d = CMTimeGetSeconds(dur);
             if (d > 0) self.duration = d;
+        }
+        // 每 5 秒落一次盘，应用被杀也不会丢太多进度
+        CFTimeInterval now = CACurrentMediaTime();
+        if (now - self.lastPersistAt > 5.0) {
+            self.lastPersistAt = now;
+            [self persistState];
         }
         // 进度单独发通知：歌词要按 20Hz 平滑推进，
         // 但整个面板不该每次都全量刷新

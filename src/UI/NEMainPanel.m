@@ -8,6 +8,7 @@
 #import "NEDiscoverPage.h"
 #import "NESidebar.h"
 #import "NELoginView.h"
+#import "NESettingsPage.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabDiscover = 0,   // 推荐/发现（也是搜索结果页）
@@ -15,7 +16,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabPlayer,         // 正在播放
 };
 
-@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate, NELoginViewDelegate>
+@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate, NELoginViewDelegate, NESettingsPageDelegate>
 @property (nonatomic, assign) NEPanelTab tab;
 @property (nonatomic, strong) UIView *headerBar;
 @property (nonatomic, strong) NESidebar *sidebar;
@@ -41,6 +42,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
 @property (nonatomic, strong, nullable) NELoginView *loginView;
+@property (nonatomic, strong) NESettingsPage *settingsPage;
 
 @end
 
@@ -55,6 +57,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         [self buildPlayerPage];
         [self buildPlayerBar];
         [self observePlayer];
+        [self buildSettingsPage];      // 最后加，保证盖在所有内容之上
     }
     return self;
 }
@@ -63,6 +66,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)start {
     [self loadAccountThenDiscover];
+    [self refreshPlayerBar];           // 显示上次退出时的歌曲（NEPlayer 会恢复）
 }
 
 - (void)loadAccountThenDiscover {
@@ -76,9 +80,9 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         } else {
             self.hint = @"未登录 · 点右上角登录";
         }
-        [self.loginButton setTitle:(loggedIn ? @"已登录" : @"登录")
-                           forState:UIControlStateNormal];
-        self.loginButton.alpha = loggedIn ? 0.5 : 1.0;
+        // 登录后按钮自动隐藏（像网易云：已登录就不再显示登录入口）
+        self.loginButton.hidden = loggedIn;
+        [self.loginButton setTitle:@"登录" forState:UIControlStateNormal];
         [self reload];
         [self.profilePage reloadData];
     }];
@@ -145,6 +149,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
+    self.settingsPage.hidden = YES;      // 切 tab 时关掉设置页
     self.tab = (NEPanelTab)index;
     if (self.tab == NEPanelTabDiscover) self.browsingList = NO;
     [self highlightTab];
@@ -202,6 +207,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.discoverPage.frame = content;
 
     self.playerBar.frame = CGRectMake(0, H - playerH, W, playerH);
+    self.settingsPage.frame = self.bounds;      // 设置页覆盖整个面板
     [self layoutPlayerBar];
 }
 
@@ -419,6 +425,31 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _discoverPage.hidden = YES;
     _discoverPage.delegate = self;
     [self addSubview:_discoverPage];
+}
+
+#pragma mark - 设置页
+
+- (void)buildSettingsPage {
+    _settingsPage = [[NESettingsPage alloc] initWithFrame:CGRectZero];
+    _settingsPage.hidden = YES;
+    _settingsPage.delegate = self;
+    [self addSubview:_settingsPage];
+}
+
+- (void)profilePageDidTapSettings:(id)page {
+    self.settingsPage.hidden = NO;
+    [self.settingsPage reloadData];
+}
+
+- (void)settingsPageDidClose:(id)page {
+    self.settingsPage.hidden = YES;
+}
+
+- (void)settingsPageDidLogout:(id)page {
+    [[NEApi shared] logout];
+    self.settingsPage.hidden = YES;
+    [self loadAccountThenDiscover];
+    [self.profilePage reloadData];
 }
 
 #pragma mark - 播放条

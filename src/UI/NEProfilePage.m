@@ -90,6 +90,11 @@
 
 @interface NEProfilePage () <UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, strong) UITableView *table;
+@property (nonatomic, strong) UIView *accountHeader;
+@property (nonatomic, strong) UIImageView *avatar;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *vipLabel;
+@property (nonatomic, strong) UIButton *gearBtn;
 
 @property (nonatomic, strong) NEPlaylist *likedPlaylist;
 @property (nonatomic, strong) NSArray<NEPlaylist *> *collected;
@@ -108,6 +113,35 @@
 }
 
 - (void)build {
+    // 顶部账号信息：头像 + 昵称 + VIP，右上角齿轮进设置
+    _accountHeader = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.bounds.size.width, 84)];
+
+    _avatar = [[UIImageView alloc] initWithFrame:CGRectMake(14, 20, 44, 44)];
+    _avatar.backgroundColor = NE_CARD;
+    _avatar.layer.cornerRadius = 22;
+    _avatar.layer.cornerCurve = kCACornerCurveContinuous;
+    _avatar.clipsToBounds = YES;
+    _avatar.contentMode = UIViewContentModeScaleAspectFill;
+    [_accountHeader addSubview:_avatar];
+
+    _nameLabel = [UILabel new];
+    _nameLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    _nameLabel.textColor = NE_TEXT;
+    [_accountHeader addSubview:_nameLabel];
+
+    _vipLabel = [UILabel new];
+    _vipLabel.font = [UIFont systemFontOfSize:11];
+    _vipLabel.textColor = NE_TEXT_DIM;
+    [_accountHeader addSubview:_vipLabel];
+
+    _gearBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_gearBtn setImage:[UIImage systemImageNamed:@"gearshape"] forState:UIControlStateNormal];
+    _gearBtn.tintColor = NE_TEXT_DIM;
+    [_gearBtn addTarget:self action:@selector(gearTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_accountHeader addSubview:_gearBtn];
+
+    [self addSubview:_accountHeader];
+
     _table = [[UITableView alloc] initWithFrame:self.bounds style:UITableViewStyleGrouped];
     _table.backgroundColor = UIColor.clearColor;
     _table.separatorColor = NE_STROKE;
@@ -121,6 +155,7 @@
 }
 
 - (void)reloadData {
+    [self reloadAccountHeader];
     if (![[NEApi shared] isLoggedIn]) {
         self.hint = @"登录后可查看收藏";
         self.likedPlaylist = nil;
@@ -144,6 +179,59 @@
             [self2.table reloadData];
         }];
     }];
+}
+
+#pragma mark - 账号头部
+
+- (void)reloadAccountHeader {
+    if (![[NEApi shared] isLoggedIn]) {
+        _nameLabel.text = @"未登录";
+        _vipLabel.text = @"登录后可同步歌单";
+        _avatar.image = nil;
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchProfile:^(NSDictionary *profile, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![profile isKindOfClass:[NSDictionary class]]) return;
+
+        self.nameLabel.text = profile[@"nickname"] ?: @"已登录";
+        NSInteger vipType = [profile[@"vipType"] integerValue];
+        if (vipType == 11) {
+            self.vipLabel.text = @"黑胶 VIP";
+        } else if (vipType == 1) {
+            self.vipLabel.text = @"音乐包";
+        } else {
+            self.vipLabel.text = @"普通用户";
+        }
+
+        NSString *avatarURL = profile[@"avatarUrl"];
+        if (avatarURL.length) {
+            [[NEImageCache shared] loadImageWithURL:avatarURL completion:^(UIImage *image) {
+                __strong typeof(weakSelf) self = weakSelf;
+                if (image) self.avatar.image = image;
+            }];
+        }
+    }];
+}
+
+- (void)gearTapped {
+    if ([self.delegate respondsToSelector:@selector(profilePageDidTapSettings:)]) {
+        [self.delegate profilePageDidTapSettings:self];
+    }
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    CGFloat W = self.bounds.size.width;
+    CGFloat H = self.bounds.size.height;
+
+    _accountHeader.frame = CGRectMake(0, 0, W, 84);
+    _nameLabel.frame = CGRectMake(70, 22, W - 124, 20);
+    _vipLabel.frame = CGRectMake(70, 44, W - 124, 16);
+    _gearBtn.frame = CGRectMake(W - 52, 26, 40, 36);
+    _table.frame = CGRectMake(0, 84, W, MAX(0, H - 84));
 }
 
 #pragma mark - 表

@@ -193,6 +193,15 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)fetchProfile:(void (^)(NSDictionary *, NSError *))complete {
+    [[NESession shared] GET:@"/api/w/nuser/account/get" params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSDictionary *profile = json[@"profile"];
+        if ([profile isKindOfClass:[NSDictionary class]]) complete(profile, nil);
+        else complete(nil, nil);
+    }];
+}
+
 #pragma mark - 内容
 
 - (void)searchSongs:(NSString *)keyword limit:(NSInteger)limit complete:(NESongsBlock)complete {

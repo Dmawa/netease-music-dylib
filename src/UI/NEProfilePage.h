@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol NEProfilePageDelegate <NSObject>
 /// 点开某个歌单
 - (void)profilePage:(id)page didSelectPlaylist:(NEPlaylist *)playlist;
+/// 点右上角设置（齿轮）
+- (void)profilePageDidTapSettings:(id)page;
 @end
 
 @interface NEProfilePage : UIView

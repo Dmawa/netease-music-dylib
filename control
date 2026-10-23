@@ -1,6 +1,6 @@
 Package: com.dmawa.nemusic
 Name: NEMusic 悬浮播放器
-Version: 0.2.0
+Version: 0.6.0
 Architecture: iphoneos-arm
 Description: 免越狱网易云音乐悬浮播放器（注入即可用，不 hook 宿主）
 Maintainer: Dmawa

@@ -22,6 +22,7 @@ Player_FILES = src/NEEntry.m \
                src/UI/NEMainPanel.m \
                src/UI/NEPlayerPage.m \
                src/UI/NEProfilePage.m \
+               src/UI/NESettingsPage.m \
                src/UI/NEDiscoverPage.m \
                src/UI/NESidebar.m \
                src/UI/NELoginView.m \

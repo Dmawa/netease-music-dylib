@@ -64,6 +64,8 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)pollQRCodeDetail:(NSString *)unikey complete:(NEPollDetailBlock)complete;
 /// 当前登录账号昵称；未登录回调 nil
 - (void)fetchAccount:(void (^)(NSString * _Nullable nickname, NSString * _Nullable avatar, NSError * _Nullable error))complete;
+/// 原始 profile（nickname/avatarUrl/userId/vipType 等），设置页用
+- (void)fetchProfile:(void (^)(NSDictionary * _Nullable profile, NSError * _Nullable error))complete;
 - (BOOL)isLoggedIn;
 - (void)logout;
 
