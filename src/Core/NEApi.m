@@ -44,7 +44,21 @@ static NESong *NESongFromJSON(NSDictionary *d) {
     if ([artists isKindOfClass:[NSArray class]]) s.artist = NEArtistsString(artists);
     if (!s.artist.length) s.artist = @"未知艺术家";
 
-    s.coverURL = d[@"album"][@"picUrl"] ?: d[@"al"][@"picUrl"] ?: @"";
+    // 不同接口给的字段不一样：
+    //   cloudsearch/pc -> al.picUrl
+    //   playlist/detail & song/detail -> album.picUrl
+    //   search/get -> 只有 album.picId（缺加密串，拼不出来，只能留空）
+    NSString *cover = d[@"al"][@"picUrl"];
+    if (![cover isKindOfClass:[NSString class]] || !cover.length)
+        cover = d[@"album"][@"picUrl"];
+    if (![cover isKindOfClass:[NSString class]] || !cover.length)
+        cover = d[@"picUrl"];
+    if (![cover isKindOfClass:[NSString class]]) cover = @"";
+    // 网易云有时给 http，iOS ATS 默认拦截，统一升级到 https
+    if ([cover hasPrefix:@"http://"]) {
+        cover = [@"https://" stringByAppendingString:[cover substringFromIndex:7]];
+    }
+    s.coverURL = cover;
 
     NSNumber *dur = d[@"duration"] ?: d[@"dt"];
     if ([dur isKindOfClass:[NSNumber class]]) s.durationMs = dur.integerValue;
@@ -109,14 +123,17 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         [self fetchToplist:complete];
         return;
     }
+    // 注意：/api/search/get 只返回 album.picId（没有 picUrl，无法拼出图片地址），
+    //        /api/cloudsearch/pc 才返回 al.picUrl，封面可直接使用。
     NSDictionary *params = @{@"s": keyword,
                              @"type": @1,
                              @"limit": @(limit > 0 ? limit : 30),
                              @"offset": @0};
-    [[NESession shared] POST:@"/api/search/get" params:params complete:^(id json, NSError *error) {
+    [[NESession shared] POST:@"/api/cloudsearch/pc" params:params complete:^(id json, NSError *error) {
         if (error) { complete(nil, error); return; }
         NSArray *songs = json[@"result"][@"songs"];
-        complete([NSArray arrayWithArray:NESongsFromArray([songs isKindOfClass:[NSArray class]] ? songs : @[])], nil);
+        complete([NSArray arrayWithArray:NESongsFromArray(
+            [songs isKindOfClass:[NSArray class]] ? songs : @[])], nil);
     }];
 }
 

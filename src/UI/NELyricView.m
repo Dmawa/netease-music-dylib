@@ -26,8 +26,10 @@
 
 - (void)setLine:(NELyricLine *)line { _line = line; [self setNeedsDisplay]; }
 - (void)setHighlightProgress:(CGFloat)p {
-    if (fabs(_highlightProgress - p) < 0.005) return;
-    _highlightProgress = MAX(0, MIN(1, p));
+    p = MAX(0, MIN(1, p));
+    // 逐字点亮需要 60fps 级别的更新，阈值放得很小（只用来省掉完全无变化的帧）
+    if (fabs(_highlightProgress - p) < 0.0005) return;
+    _highlightProgress = p;
     [self setNeedsDisplay];
 }
 - (void)setActive:(BOOL)active { _active = active; [self setNeedsDisplay]; }
@@ -150,6 +152,13 @@
 @property (nonatomic, assign) NSTimeInterval dragEndAt;
 @property (nonatomic, assign) CGFloat lastLayoutWidth;
 @property (nonatomic, assign) CGFloat lastLayoutHeight;
+@property (nonatomic, assign) NSInteger scrolledIndex;
+/// 显示链接：把「最近一次已知播放时间」插值成 60fps，避免 0.5s 一跳
+@property (nonatomic, strong, nullable) CADisplayLink *displayLink;
+@property (nonatomic, assign) double anchorTime;        // 最近一次外部给定的时间
+@property (nonatomic, assign) CFTimeInterval anchorAt;  // 该时间对应的机器时刻
+@property (nonatomic, assign) BOOL playing;
+
 @end
 
 @implementation NELyricView
@@ -199,6 +208,7 @@
     for (NELyricLineView *v in self.lineViews) [v removeFromSuperview];
     [self.lineViews removeAllObjects];
     self.currentIndex = -1;
+    self.scrolledIndex = -1;
 
     NSArray<NELyricLine *> *lines = self.lyric.lines;
     self.emptyLabel.hidden = lines.count > 0;
@@ -276,6 +286,7 @@
     }
     self.scroll.contentSize = self.content.bounds.size;
     self.scroll.contentInset = UIEdgeInsetsZero;
+    self.scrolledIndex = -1;
 
     [self applyTimeToViews];
     [self scrollToCurrentAnimated:NO];
@@ -284,12 +295,59 @@
 #pragma mark - 时间驱动
 
 - (void)setCurrentTime:(double)currentTime {
+    // 外部（AVPlayer，20Hz）给一个准确时间，记为锚点。
+    // 中间由 displayLink 按真实流逝插值，逐字高亮才连续。
     _currentTime = currentTime;
+    self.anchorTime = currentTime;
+    self.anchorAt = CACurrentMediaTime();
+
     [self applyTimeToViews];
-    // 用户主动滚动后 4 秒内不自动跟随，避免打断阅读
+    [self followIfNeeded];
+}
+
+/// 该不该自动滚动跟随当前行
+- (void)followIfNeeded {
     if (self.userDragging) return;
     if (self.dragEndAt > 0 && CACurrentMediaTime() - self.dragEndAt < 4.0) return;
     [self scrollToCurrentAnimated:YES];
+}
+
+- (void)setPlaying:(BOOL)playing {
+    _playing = playing;
+    if (playing) [self startDisplayLink];
+    else [self stopDisplayLink];
+}
+
+- (void)startDisplayLink {
+    if (self.displayLink) return;
+    self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(onDisplayTick)];
+    self.displayLink.preferredFramesPerSecond = 60;
+    [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)stopDisplayLink {
+    [self.displayLink invalidate];
+    self.displayLink = nil;
+}
+
+- (void)onDisplayTick {
+    // 只做插值，不回写锚点（否则时间永远停在原点）
+    double t = self.anchorTime;
+    if (self.playing) {
+        t += (CACurrentMediaTime() - self.anchorAt);
+        if (!isfinite(t) || t < 0) t = 0;
+    }
+    _currentTime = t;
+    [self applyTimeToViews];
+}
+
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+    [super willMoveToWindow:newWindow];
+    if (!newWindow) [self stopDisplayLink];
+}
+
+- (void)dealloc {
+    [self.displayLink invalidate];
 }
 
 - (void)applyTimeToViews {
@@ -324,21 +382,27 @@
     if (changed) self.currentIndex = idx;
 }
 
+/// 只在「切换行」时滚动一次，而不是每帧都滚。
+/// 之前每帧都起一个新动画，动画互相打断，看起来就是卡顿。
 - (void)scrollToCurrentAnimated:(BOOL)animated {
     if (self.currentIndex < 0 || self.currentIndex >= (NSInteger)self.lineViews.count) return;
+    if (self.scrolledIndex == self.currentIndex) return;
+    self.scrolledIndex = self.currentIndex;
+
     NELyricLineView *v = self.lineViews[self.currentIndex];
     CGFloat target = CGRectGetMidY(v.frame) - self.bounds.size.height * 0.42;
     CGFloat maxY = MAX(0, self.scroll.contentSize.height - self.bounds.size.height);
     target = MAX(-self.scroll.contentInset.top, MIN(target, maxY));
 
     if (animated) {
-        [UIView animateWithDuration:0.32 delay:0
-                            options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
+        // 用 0.45s 缓动，和网易云的滚动节奏接近
+        [UIView animateWithDuration:0.45 delay:0
+                            options:UIViewAnimationOptionCurveEaseInOut
                          animations:^{
-            [self.scroll setContentOffset:CGPointMake(0, target) animated:NO];
+            self.scroll.contentOffset = CGPointMake(0, target);
         } completion:nil];
     } else {
-        [self.scroll setContentOffset:CGPointMake(0, target) animated:NO];
+        self.scroll.contentOffset = CGPointMake(0, target);
     }
 }
 

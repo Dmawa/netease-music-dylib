@@ -4,6 +4,7 @@
 
 NSString *const NEPlayerStateChangedNotification = @"NEPlayerStateChangedNotification";
 NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotification";
+NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
 
 @interface NEPlayer ()
 @property (nonatomic, strong) AVPlayer *player;
@@ -250,7 +251,7 @@ NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotific
 
 - (void)addPeriodicObserver {
     __weak typeof(self) weakSelf = self;
-    self.timeObserver = [self.player addPeriodicTimeObserverForInterval:CMTimeMake(1, 2)
+    self.timeObserver = [self.player addPeriodicTimeObserverForInterval:CMTimeMake(1, 20)
                                                                   queue:dispatch_get_main_queue()
                                                              usingBlock:^(CMTime time) {
         __strong typeof(weakSelf) self = weakSelf;
@@ -261,7 +262,10 @@ NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotific
             double d = CMTimeGetSeconds(dur);
             if (d > 0) self.duration = d;
         }
-        [self notifyState];
+        // 进度单独发通知：歌词要按 20Hz 平滑推进，
+        // 但整个面板不该每次都全量刷新
+        [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerProgressNotification
+                                                            object:self];
     }];
 }
 

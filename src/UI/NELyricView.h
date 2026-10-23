@@ -19,6 +19,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) double currentTime;
 /// 是否显示翻译（默认 YES）
 @property (nonatomic, assign) BOOL showsTranslation;
+/// 是否正在播放：开启后用 CADisplayLink 做 60fps 时间插值
+@property (nonatomic, assign) BOOL playing;
 
 - (void)reload;
 

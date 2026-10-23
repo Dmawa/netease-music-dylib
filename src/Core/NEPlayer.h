@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 extern NSString *const NEPlayerStateChangedNotification;
 extern NSString *const NEPlayerTrackChangedNotification;
+/// 播放进度（约 20Hz），只给歌词/进度条用
+extern NSString *const NEPlayerProgressNotification;
 
 @interface NEPlayer : NSObject
 

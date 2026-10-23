@@ -3,6 +3,7 @@
 #import "NEPlayer.h"
 #import "NEApi.h"
 #import "NELyricView.h"
+#import "NEImageCache.h"
 
 @interface NEPlayerPage () <NELyricViewDelegate>
 @property (nonatomic, strong) UIImageView *cover;
@@ -22,6 +23,8 @@
 @property (nonatomic, assign) BOOL showsTranslation;
 @property (nonatomic, assign) BOOL userSeeking;
 @property (nonatomic, strong) NESong *loadedSong;
+@property (nonatomic, copy) NSString *coverURLString;
+@property (nonatomic, strong) UIImageView *coverBlurBackdrop;
 @end
 
 @implementation NEPlayerPage
@@ -40,9 +43,16 @@
 
 - (void)build {
     // 背景：封面高斯模糊，营造网易云的沉浸感
+    // 模糊封面铺满整个播放页，营造网易云的沉浸感
+    _coverBlurBackdrop = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _coverBlurBackdrop.contentMode = UIViewContentModeScaleAspectFill;
+    _coverBlurBackdrop.clipsToBounds = YES;
+    _coverBlurBackdrop.alpha = 0.35;
+    [self addSubview:_coverBlurBackdrop];
+
     _coverBlur = [[UIVisualEffectView alloc] initWithEffect:
                   [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    _coverBlur.alpha = 0.55;
+    _coverBlur.alpha = 0.72;
     _coverBlur.userInteractionEnabled = NO;
     [self addSubview:_coverBlur];
 
@@ -125,6 +135,7 @@
     [super layoutSubviews];
     CGFloat W = self.bounds.size.width;
     CGFloat H = self.bounds.size.height;
+    _coverBlurBackdrop.frame = self.bounds;
     _coverBlur.frame = self.bounds;
 
     // iPad / 宽屏：左封面 + 右歌词；窄屏：上图下词
@@ -217,14 +228,27 @@
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:self selector:@selector(onState) name:NEPlayerStateChangedNotification object:nil];
     [nc addObserver:self selector:@selector(onTrack) name:NEPlayerTrackChangedNotification object:nil];
+    // 进度单独通知（约 20Hz），只推进歌词，不做全量 UI 刷新
+    [nc addObserver:self selector:@selector(onProgress) name:NEPlayerProgressNotification object:nil];
 }
 
 - (void)onState {
     [self refresh];
-    // 歌词随时间滚动
+}
+
+- (void)onProgress {
     NEPlayer *p = [NEPlayer shared];
-    if (self.lyric) {
-        self.lyricView.currentTime = p.currentTime;
+    // 让歌词视图按 60fps 插值推进
+    self.lyricView.playing = p.isPlaying;
+    self.lyricView.currentTime = p.currentTime;
+    // 进度条与时间文本跟着走（不重建视图）
+    if (!self.userSeeking) {
+        _progress.value = p.currentTime;
+        _timeNow.text = [self formatTime:p.currentTime];
+        if (p.duration > 0) {
+            _progress.maximumValue = MAX(1.0, p.duration);
+            _timeTotal.text = [self formatTime:p.duration];
+        }
     }
 }
 
@@ -248,6 +272,7 @@
         if (![self.loadedSong.songID isEqualToString:song.songID]) return;
         self.lyric = lyric;
         self.lyricView.lyric = lyric;
+        self.lyricView.playing = [NEPlayer shared].isPlaying;
         self.lyricView.currentTime = [NEPlayer shared].currentTime;
     }];
 }
@@ -260,6 +285,7 @@
 
     BOOL playing = p.isPlaying;
     [_playBtn setTitle:(playing ? @"❚❚" : @"▶") forState:UIControlStateNormal];
+    self.lyricView.playing = playing;
 
     _progress.maximumValue = MAX(1.0, p.duration);
     if (!self.userSeeking) {
@@ -272,25 +298,39 @@
 }
 
 - (void)loadCoverIfNeeded:(NESong *)song {
-    if (!song.coverURL.length) { _cover.image = nil; return; }
-    static NSString *lastURL = nil;
-    if ([lastURL isEqualToString:song.coverURL]) return;
-    lastURL = song.coverURL;
+    NSString *url = song.coverURL;
+    if (!url.length) {
+        _cover.image = nil;
+        return;
+    }
+    // 同一首歌不重复加载；比原来的 static 全局变量更安全（支持多实例/切歌）
+    if ([self.coverURLString isEqualToString:url] && _cover.image) return;
+    self.coverURLString = url;
+
+    // 命中内存缓存直接上
+    UIImage *cached = [[NEImageCache shared] imageForKey:url];
+    if (cached) { [self applyCover:cached]; return; }
 
     __weak typeof(self) weakSelf = self;
-    NSURL *u = [NSURL URLWithString:song.coverURL];
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        NSData *d = [NSData dataWithContentsOfURL:u];
-        UIImage *img = d ? [UIImage imageWithData:d] : nil;
-        if (!img) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
-            [UIView transitionWithView:self.cover duration:0.25
-                               options:UIViewAnimationOptionTransitionCrossDissolve
-                            animations:^{ self.cover.image = img; } completion:nil];
-        });
-    });
+    [[NEImageCache shared] loadImageWithURL:url completion:^(UIImage *img) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        // 回调回来时可能已经切歌了
+        if (![self.coverURLString isEqualToString:url]) return;
+        if (img) [self applyCover:img];
+    }];
+}
+
+- (void)applyCover:(UIImage *)img {
+    [UIView transitionWithView:self.cover duration:0.22
+                       options:UIViewAnimationOptionTransitionCrossDissolve
+                    animations:^{
+        self.cover.image = img;
+    } completion:nil];
+    // 背景也铺一层模糊封面，接近网易云的沉浸效果
+    if (self.coverBlurBackdrop) {
+        self.coverBlurBackdrop.image = img;
+    }
 }
 
 #pragma mark - NELyricViewDelegate
