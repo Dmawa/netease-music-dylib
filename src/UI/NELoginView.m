@@ -230,9 +230,11 @@ typedef NS_ENUM(NSInteger, NELoginState) {
         }
         self.unikey = unikey;
 
-        // 二维码本地生成：网易云没有可直接下载的图片接口
+        // 二维码内容必须与官方 web 端完全一致：
+        //   http://music.163.com/login?codekey=<unikey>
+        // 官方 js 里写的就是 http（不是 https），App 扫码时按这个前缀识别。
         NSString *content = [NSString stringWithFormat:
-            @"https://music.163.com/login?codekey=%@", unikey];
+            @"http://music.163.com/login?codekey=%@", unikey];
         UIImage *img = [NEQRCode imageWithText:content size:260];
         self.qrView.image = img;
 

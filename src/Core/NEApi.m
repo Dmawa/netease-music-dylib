@@ -96,8 +96,10 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)pollQRCode:(NSString *)unikey complete:(NEPollBlock)complete {
-    NSString *path = [NSString stringWithFormat:@"/api/login/qrcode/client/login?key=%@&type=1", unikey];
-    [[NESession shared] POST:path params:nil complete:^(id json, NSError *error) {
+    // 与官方一致：key 放在 POST body 里，不放 query
+    [[NESession shared] POST:@"/api/login/qrcode/client/login"
+                      params:@{@"key": unikey ?: @"", @"type": @1}
+                    complete:^(id json, NSError *error) {
         if (error) { complete(-1, nil, error); return; }
         NSInteger code = [json[@"code"] integerValue];
         NSString *nick = nil;
@@ -110,9 +112,9 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)pollQRCodeDetail:(NSString *)unikey complete:(NEPollDetailBlock)complete {
-    NSString *path = [NSString stringWithFormat:
-        @"/api/login/qrcode/client/login?key=%@&type=1", unikey];
-    [[NESession shared] POST:path params:nil complete:^(id json, NSError *error) {
+    [[NESession shared] POST:@"/api/login/qrcode/client/login"
+                      params:@{@"key": unikey ?: @"", @"type": @1}
+                    complete:^(id json, NSError *error) {
         if (error) { complete(-1, nil, nil, error); return; }
 
         NSInteger code = -1;
@@ -153,7 +155,8 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         return;
     }
     // 有 MUSIC_U：向服务端确认一次（可能已过期/被踢下线）
-    [[NESession shared] GET:@"/api/nuser/account/get" params:nil complete:^(id json, NSError *error) {
+    // 官方 803 之后用的是 /api/w/nuser/account/get，这里保持一致
+    [[NESession shared] GET:@"/api/w/nuser/account/get" params:nil complete:^(id json, NSError *error) {
         if (error) {
             // 网络失败不代表登录失效，保留本地 Cookie 下次再试
             complete([NESession shared].isLoggedIn, nil, nil);
