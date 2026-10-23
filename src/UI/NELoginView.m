@@ -252,7 +252,9 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 
     NSString *key = self.unikey;
     __weak typeof(self) weakSelf = self;
-    [[NEApi shared] pollQRCode:key complete:^(NSInteger code, NSString *nickname, NSError *error) {
+    [[NEApi shared] pollQRCodeDetail:key complete:^(NSInteger code, NSString *nickname,
+                                                    NSArray<NSString *> *setCookieLines,
+                                                    NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.stopped) return;
         self.polling = NO;
@@ -260,12 +262,20 @@ typedef NS_ENUM(NSInteger, NELoginState) {
         // 期间换了 unikey 就丢弃旧结果
         if (![self.unikey isEqualToString:key]) return;
 
+        if (code == 803) {
+            NSLog(@"[NELogin] 803 Set-Cookie lines = %@", setCookieLines);
+        }
+
         if (error) {
             // 网络抖动不立刻判死，继续重试几次
             [self applyState:NELoginStateWaiting message:error.localizedDescription];
             [self schedulePoll:2.0];
             return;
         }
+
+        NSLog(@"[NELogin] poll code=%ld loggedIn=%d cookies=%@",
+              (long)code, [[NEApi shared] isLoggedIn],
+              [[NESession shared] cookieHeader]);
 
         switch (code) {
             case 800:   // 过期

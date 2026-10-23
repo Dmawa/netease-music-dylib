@@ -109,6 +109,43 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)pollQRCodeDetail:(NSString *)unikey complete:(NEPollDetailBlock)complete {
+    NSString *path = [NSString stringWithFormat:
+        @"/api/login/qrcode/client/login?key=%@&type=1", unikey];
+    [[NESession shared] POST:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(-1, nil, nil, error); return; }
+
+        NSInteger code = -1;
+        if ([json isKindOfClass:[NSDictionary class]]) {
+            code = [json[@"code"] integerValue];
+        }
+        NSString *nick = [json isKindOfClass:[NSDictionary class]] ? json[@"nickname"] : nil;
+        NSArray *raw = [NESession shared].rawSetCookieLines ?: @[];
+
+        // 803 时服务端会下发 MUSIC_U。这里再兜底检查一次：
+        // 万一系统 Cookie 存储没同步，直接从原始 Set-Cookie 行里补写进 jar。
+        if (code == 803) {
+            for (NSString *line in raw) {
+                if (![line isKindOfClass:[NSString class]]) continue;
+                NSString *pair = [line componentsSeparatedByString:@";"].firstObject;
+                NSRange eq = [pair rangeOfString:@"="];
+                if (eq.location == NSNotFound || eq.location == 0) continue;
+                NSString *name = [[pair substringToIndex:eq.location]
+                                  stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+                NSString *value = [[pair substringFromIndex:eq.location + 1]
+                                   stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+                if ([name isEqualToString:@"MUSIC_U"] && value.length) {
+                    [[NESession shared] setCookieValue:value forName:@"MUSIC_U"];
+                }
+                if ([name isEqualToString:@"__csrf"] && value.length) {
+                    [[NESession shared] setCookieValue:value forName:@"__csrf"];
+                }
+            }
+        }
+        complete(code, nick, raw, nil);
+    }];
+}
+
 - (void)restoreSession:(void (^)(BOOL, NSString *, NSString *))complete {
     // 没有本地 Cookie：直接判定未登录
     if (![NESession shared].isLoggedIn) {

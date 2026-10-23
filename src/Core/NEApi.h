@@ -43,6 +43,10 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void (^NEQRCodeBlock)(NSString * _Nullable unikey, NSError * _Nullable error);
 /// 801 等扫码 / 802 已扫待确认 / 803 成功 / 800 过期
 typedef void (^NEPollBlock)(NSInteger code, NSString * _Nullable nickname, NSError * _Nullable error);
+/// 轮询回调的扩展版：同时回传响应里的原始 Set-Cookie 行（便于确认 MUSIC_U）
+typedef void (^NEPollDetailBlock)(NSInteger code, NSString * _Nullable nickname,
+                                  NSArray<NSString *> * _Nullable setCookieLines,
+                                  NSError * _Nullable error);
 typedef void (^NESongsBlock)(NSArray<NESong *> * _Nullable songs, NSError * _Nullable error);
 typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable error);
 
@@ -55,6 +59,8 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)requestQRKey:(NEQRCodeBlock)complete;
 /// 轮询扫码状态；返回 code 语义见 NEPollBlock 注释
 - (void)pollQRCode:(NSString *)unikey complete:(NEPollBlock)complete;
+/// 同 pollQRCode，但额外返回原始 Set-Cookie，用于诊断登录凭证问题
+- (void)pollQRCodeDetail:(NSString *)unikey complete:(NEPollDetailBlock)complete;
 /// 当前登录账号昵称；未登录回调 nil
 - (void)fetchAccount:(void (^)(NSString * _Nullable nickname, NSString * _Nullable avatar, NSError * _Nullable error))complete;
 - (BOOL)isLoggedIn;

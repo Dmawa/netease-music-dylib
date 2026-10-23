@@ -26,6 +26,10 @@ typedef void (^NECompletion)(id _Nullable json, NSError * _Nullable error);
 - (nullable NSString *)valueForCookie:(NSString *)name;
 /// 合并响应里的 Set-Cookie
 - (void)absorbResponseCookies:(NSURLResponse *)response;
+/// 最近一次响应里的原始 Set-Cookie 行（诊断用）
+@property (nonatomic, copy, readonly) NSArray<NSString *> *rawSetCookieLines;
+/// 直接写入一个 cookie（登录成功后兜底用）
+- (void)setCookieValue:(NSString *)value forName:(NSString *)name;
 /// 退出登录
 - (void)clearCookies;
 

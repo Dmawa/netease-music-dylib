@@ -12,6 +12,7 @@ static NSString *const kCookieCsrf   = @"__csrf";
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *jar;
 @property (nonatomic, strong) NSURLSession *session;
 @property (nonatomic, strong) NSLock *lock;
+@property (nonatomic, copy, readwrite) NSArray<NSString *> *rawSetCookieLines;
 @end
 
 @implementation NESession
@@ -192,6 +193,7 @@ static NSString *const kCookieCsrf   = @"__csrf";
             }
         }
     }
+    self.rawSetCookieLines = [lines copy];
     if (changed) [self persist];
 }
 
@@ -232,6 +234,12 @@ static NSString *const kCookieCsrf   = @"__csrf";
     [self.lock lock];
     self.jar[name] = value;
     [self.lock unlock];
+}
+
+- (void)setCookieValue:(NSString *)value forName:(NSString *)name {
+    if (!name.length || !value.length) return;
+    [self setCookie:name value:value];
+    [self persist];
 }
 
 - (void)clearCookies {
