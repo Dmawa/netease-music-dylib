@@ -422,7 +422,7 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)fetchCommentsForSongID:(NSString *)songID limit:(NSInteger)limit
-                         complete:(void (^)(NSArray<NSDictionary *> *, NSError *))complete {
+                         complete:(void (^)(NSArray<NSDictionary *> *, NSInteger, NSError *))complete {
     if (!songID.length) {
         complete(nil, [NSError errorWithDomain:@"NEMusic" code:-30
                                      userInfo:@{NSLocalizedDescriptionKey: @"歌曲 ID 为空"}]);
@@ -432,8 +432,8 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         @"/api/v1/resource/comments/R_SO_4_%@?limit=%ld&offset=0",
         songID, (long)MAX(1, limit)];
     [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
-        if (error) { complete(nil, error); return; }
-        if (![json isKindOfClass:[NSDictionary class]]) { complete(@[], nil); return; }
+        if (error) { complete(nil, 0, error); return; }
+        if (![json isKindOfClass:[NSDictionary class]]) { complete(@[], 0, nil); return; }
 
         NSMutableArray *all = [NSMutableArray array];
         NSMutableSet *seen = [NSMutableSet set];
@@ -448,7 +448,7 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 [all addObject:c];
             }
         }
-        complete(all, nil);
+        complete(all, [json[@"total"] integerValue], nil);
     }];
 }
 

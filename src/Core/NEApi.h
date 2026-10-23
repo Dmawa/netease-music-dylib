@@ -115,6 +115,7 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)fetchCommentsForSongID:(NSString *)songID
                          limit:(NSInteger)limit
                       complete:(void (^)(NSArray<NSDictionary *> * _Nullable comments,
+                                         NSInteger total,
                                          NSError * _Nullable error))complete;
 /// 喜欢 / 取消喜欢一首歌（需要登录）
 - (void)likeSongID:(NSString *)songID

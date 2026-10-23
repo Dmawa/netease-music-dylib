@@ -7,6 +7,9 @@
 NSString *const NEPlayerStateChangedNotification = @"NEPlayerStateChangedNotification";
 NSString *const NEPlayerTrackChangedNotification = @"NEPlayerTrackChangedNotification";
 NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
+NSString *const NEPlayerQueueChangedNotification = @"NEPlayerQueueChangedNotification";
+
+static NSString *const kNEPlayModeKey = @"NEPlayerPlayMode";
 
 @interface NEPlayer ()
 @property (nonatomic, strong) AVPlayer *player;
@@ -36,6 +39,7 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
     if ((self = [super init])) {
         _queue = @[];
         _currentIndex = -1;
+        _playMode = (NEPlayMode)[[NSUserDefaults standardUserDefaults] integerForKey:kNEPlayModeKey];
         [self setupAudioSession];
         [self observeInterruptions];
         [self setupRemoteCommands];
@@ -218,7 +222,55 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
     if (!songs.count) return;
     self.queue = songs;
     self.currentIndex = MAX(0, MIN(index, (NSInteger)songs.count - 1));
+    [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerQueueChangedNotification object:self];
     [self loadCurrentAndPlay];
+}
+
+#pragma mark - 播放模式 / 队列
+
+- (void)setPlayMode:(NEPlayMode)playMode {
+    _playMode = playMode;
+    [[NSUserDefaults standardUserDefaults] setInteger:playMode forKey:kNEPlayModeKey];
+    [self notifyState];
+}
+
+- (void)cyclePlayMode {
+    self.playMode = (NEPlayMode)((self.playMode + 1) % 4);
+}
+
+- (void)playAtIndex:(NSInteger)index {
+    if (index < 0 || index >= (NSInteger)self.queue.count) return;
+    self.currentIndex = index;
+    [self loadCurrentAndPlay];
+}
+
+- (void)removeSongAtIndex:(NSInteger)index {
+    if (index < 0 || index >= (NSInteger)self.queue.count) return;
+
+    NSMutableArray *queue = [self.queue mutableCopy];
+    BOOL removingCurrent = (index == self.currentIndex);
+    [queue removeObjectAtIndex:index];
+    self.queue = queue;
+
+    if (!queue.count) {
+        [self stop];
+        [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerQueueChangedNotification object:self];
+        return;
+    }
+    if (removingCurrent) {
+        if (self.currentIndex >= (NSInteger)queue.count) {
+            self.currentIndex = (NSInteger)queue.count - 1;
+        }
+        [self loadCurrentAndPlay];
+    } else if (index < self.currentIndex) {
+        self.currentIndex--;
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerQueueChangedNotification object:self];
+}
+
+- (void)clearQueue {
+    [self stop];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NEPlayerQueueChangedNotification object:self];
 }
 
 - (void)loadCurrentAndPlay {
@@ -280,18 +332,59 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 }
 
 - (void)advanceAutomatically {
-    if (self.currentIndex + 1 < (NSInteger)self.queue.count) {
-        self.currentIndex++;
-        [self loadCurrentAndPlay];
-    } else {
-        // 队列播完：停在最后一首。把 index 归零会让 currentSong 与播放器状态对不上，
-        // 面板会显示第一首却没有任何声音。
-        [self.player pause];
-        self.isPlaying = NO;
-        self.currentTime = self.duration;
+    NSInteger count = (NSInteger)self.queue.count;
+    if (count <= 0) return;
+
+    // 单曲循环
+    if (self.playMode == NEPlayModeSingleLoop) {
+        [self.player seekTo:CMTimeMakeWithSeconds(0, NSEC_PER_SEC)
+            toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+        [self.player play];
+        self.isPlaying = YES;
+        self.currentTime = 0;
         [self notifyState];
-        [self updateNowPlaying];
+        return;
     }
+
+    // 只有一首：循环模式重播，顺序模式停下
+    if (count == 1) {
+        if (self.playMode == NEPlayModeListLoop || self.playMode == NEPlayModeShuffle) {
+            [self seekTo:0];
+            [self.player play];
+            self.isPlaying = YES;
+            [self notifyState];
+        } else {
+            [self.player pause];
+            self.isPlaying = NO;
+            [self notifyState];
+        }
+        return;
+    }
+
+    NSInteger nextIndex = -1;
+    if (self.playMode == NEPlayModeShuffle) {
+        do { nextIndex = (NSInteger)arc4random_uniform((uint32_t)count); }
+        while (nextIndex == self.currentIndex);
+    } else {
+        nextIndex = self.currentIndex + 1;
+    }
+
+    if (nextIndex >= count) {
+        if (self.playMode == NEPlayModeListLoop) {
+            nextIndex = 0;
+        } else {
+            // 顺序播放：停到最后一首
+            [self.player pause];
+            self.isPlaying = NO;
+            self.currentTime = self.duration;
+            [self notifyState];
+            [self updateNowPlaying];
+            return;
+        }
+    }
+
+    self.currentIndex = nextIndex;
+    [self loadCurrentAndPlay];
 }
 
 - (void)togglePlayPause {
@@ -314,16 +407,43 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 }
 
 - (void)next {
-    if (self.currentIndex + 1 >= (NSInteger)self.queue.count) return;
-    self.currentIndex++;
+    NSInteger count = (NSInteger)self.queue.count;
+    if (count <= 1) return;
+
+    if (self.playMode == NEPlayModeShuffle) {
+        NSInteger idx;
+        do { idx = (NSInteger)arc4random_uniform((uint32_t)count); }
+        while (idx == self.currentIndex);
+        self.currentIndex = idx;
+    } else if (self.currentIndex + 1 < count) {
+        self.currentIndex++;
+    } else if (self.playMode == NEPlayModeListLoop) {
+        self.currentIndex = 0;
+    } else {
+        return;
+    }
     [self loadCurrentAndPlay];
 }
 
 - (void)previous {
+    NSInteger count = (NSInteger)self.queue.count;
     // 播放超过 3 秒先回开头，符合常见交互
     if (self.currentTime > 3.0) { [self seekTo:0]; return; }
-    if (self.currentIndex <= 0) { [self seekTo:0]; return; }
-    self.currentIndex--;
+    if (count <= 1) { [self seekTo:0]; return; }
+
+    if (self.playMode == NEPlayModeShuffle) {
+        NSInteger idx;
+        do { idx = (NSInteger)arc4random_uniform((uint32_t)count); }
+        while (idx == self.currentIndex);
+        self.currentIndex = idx;
+    } else if (self.currentIndex > 0) {
+        self.currentIndex--;
+    } else if (self.playMode == NEPlayModeListLoop) {
+        self.currentIndex = count - 1;
+    } else {
+        [self seekTo:0];
+        return;
+    }
     [self loadCurrentAndPlay];
 }
 
