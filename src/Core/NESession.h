@@ -22,6 +22,12 @@ typedef void (^NECompletion)(id _Nullable json, NSError * _Nullable error);
       params:(nullable NSDictionary<NSString *, id> *)params
     complete:(NECompletion)complete;
 
+/// weapi（AES-128-CBC + RSA-1024）：官方 web 的登录接口走这套，
+/// 明文 /api/login/qrcode/* 会被当成旧版客户端（扫码后回 8821）
+- (void)POSTWeapi:(NSString *)path
+           params:(nullable NSDictionary<NSString *, id> *)params
+         complete:(NECompletion)complete;
+
 /// 读取单个 cookie（如 MUSIC_U / __csrf）
 - (nullable NSString *)valueForCookie:(NSString *)name;
 /// 合并响应里的 Set-Cookie

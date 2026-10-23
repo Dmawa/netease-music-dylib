@@ -86,10 +86,10 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 #pragma mark - 登录
 
 - (void)requestQRKey:(NEQRCodeBlock)complete {
-    // 与官方一致：type 放在 POST body 里（官方 js 用 {type:1}）
-    [[NESession shared] POST:@"/api/login/qrcode/unikey"
-                      params:@{@"type": @1}
-                    complete:^(id json, NSError *error) {
+    // 官方 web 用的是 /weapi 加密接口；明文 /api 会被判成旧版客户端
+    [[NESession shared] POSTWeapi:@"/weapi/login/qrcode/unikey"
+                           params:@{@"type": @1}
+                         complete:^(id json, NSError *error) {
         if (error) { complete(nil, error); return; }
         NSString *key = json[@"unikey"];
         if ([key isKindOfClass:[NSString class]] && key.length) complete(key, nil);
@@ -100,9 +100,9 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 
 - (void)pollQRCode:(NSString *)unikey complete:(NEPollBlock)complete {
     // 与官方一致：key 放在 POST body 里，不放 query
-    [[NESession shared] POST:@"/api/login/qrcode/client/login"
-                      params:@{@"key": unikey ?: @"", @"type": @1}
-                    complete:^(id json, NSError *error) {
+    [[NESession shared] POSTWeapi:@"/weapi/login/qrcode/client/login"
+                           params:@{@"key": unikey ?: @"", @"type": @1}
+                         complete:^(id json, NSError *error) {
         if (error) { complete(-1, nil, error); return; }
         NSInteger code = [json[@"code"] integerValue];
         NSString *nick = nil;
@@ -115,9 +115,9 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)pollQRCodeDetail:(NSString *)unikey complete:(NEPollDetailBlock)complete {
-    [[NESession shared] POST:@"/api/login/qrcode/client/login"
-                      params:@{@"key": unikey ?: @"", @"type": @1}
-                    complete:^(id json, NSError *error) {
+    [[NESession shared] POSTWeapi:@"/weapi/login/qrcode/client/login"
+                           params:@{@"key": unikey ?: @"", @"type": @1}
+                         complete:^(id json, NSError *error) {
         if (error) { complete(-1, nil, nil, nil, error); return; }
 
         // 原始响应全量打日志：出现 8821 这类非标准状态码时能直接看到服务端说法

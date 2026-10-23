@@ -1,8 +1,11 @@
 #import "NESession.h"
+#import "NECrypto.h"
 
+/// 用桌面浏览器 UA：官方 QR 登录是 web 客户端的流程，
+/// 移动端 UA 会被当成旧版客户端（扫码后回 8821）
 static NSString *const kNEUserAgent =
-    @"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-    @"AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+    @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    @"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 /// 登录态相关的关键 Cookie
 static NSString *const kCookieMusicU = @"MUSIC_U";
@@ -335,6 +338,42 @@ static NSString *const kCookieCsrf   = @"__csrf";
 
 - (void)GET:(NSString *)path params:(NSDictionary *)params complete:(NECompletion)complete {
     [self perform:[self requestWithPath:path params:params method:@"GET"] complete:complete];
+}
+
+#pragma mark - weapi
+
+- (void)POSTWeapi:(NSString *)path params:(NSDictionary *)params complete:(NECompletion)complete {
+    NSMutableDictionary *data = [NSMutableDictionary dictionary];
+    if (params) [data addEntriesFromDictionary:params];
+    // 官方前端加密前会补 csrf_token（未登录时为空串）
+    data[@"csrf_token"] = [self valueForCookie:kCookieCsrf] ?: @"";
+
+    NSString *body = [NECrypto weapiBodyWithData:data];
+    if (!body.length) {
+        NSError *e = [NSError errorWithDomain:@"NEMusic" code:-3
+                                    userInfo:@{NSLocalizedDescriptionKey: @"请求加密失败"}];
+        dispatch_async(dispatch_get_main_queue(), ^{ complete(nil, e); });
+        return;
+    }
+
+    NSString *full = [path hasPrefix:@"http"] ? path
+                    : [@"https://music.163.com" stringByAppendingString:path];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:full]];
+    req.HTTPMethod = @"POST";
+    req.timeoutInterval = 20;
+    req.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    [req setValue:kNEUserAgent forHTTPHeaderField:@"User-Agent"];
+    [req setValue:@"https://music.163.com/" forHTTPHeaderField:@"Referer"];
+    [req setValue:@"https://music.163.com" forHTTPHeaderField:@"Origin"];
+    [req setValue:@"application/x-www-form-urlencoded" forHTTPHeaderField:@"Content-Type"];
+
+    [self valueForCookie:kCookieMusicU];
+    [self valueForCookie:kCookieCsrf];
+    NSString *cookie = [self cookieHeader];
+    if (cookie.length) [req setValue:cookie forHTTPHeaderField:@"Cookie"];
+
+    req.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
+    [self perform:req complete:complete];
 }
 
 - (void)POST:(NSString *)path params:(NSDictionary *)params complete:(NECompletion)complete {

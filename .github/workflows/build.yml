@@ -38,7 +38,7 @@ jobs:
               -Wall -Wno-unused-parameter -Wno-deprecated-declarations \
               -framework Foundation -framework UIKit -framework AVFoundation \
               -framework MediaPlayer -framework QuartzCore -framework CoreGraphics \
-              -framework CoreMedia \
+              -framework CoreMedia -framework Security \
               -install_name /usr/lib/Player.dylib \
               -o out/Player.$ARCH.dylib $SRCS
           done
