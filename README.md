@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40031325031](https://github.com/Dmawa/netease-music-dylib/actions/runs/40031325031) ✅（三个 job 全绿）
-- 最新版本：v0.6.4（播客/笔记 tab + 播放历史）
+- 最近一次 CI：run [40033424937](https://github.com/Dmawa/netease-music-dylib/actions/runs/40033424937) ✅（三个 job 全绿）
+- 最新版本：v0.6.5（我的页接入 header 接口：等级/关注/粉丝/听歌量）
 
 ## 设计边界
 
