@@ -5,6 +5,7 @@
 #import "NEQRCode.h"
 #import "NEPlayerPage.h"
 #import "NEProfilePage.h"
+#import "NEDiscoverPage.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabDiscover = 0,   // 推荐/发现
@@ -27,6 +28,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) NEPlayerPage *playerPage;
 @property (nonatomic, strong) NEProfilePage *profilePage;
+@property (nonatomic, strong) NEDiscoverPage *discoverPage;
 @property (nonatomic, strong) UIButton *loginButton;
 /// 当前正在浏览的歌单（用于返回时显示标题）
 @property (nonatomic, copy) NSString *currentPlaylistTitle;
@@ -183,19 +185,33 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.table.frame = content;
     self.playerPage.frame = content;
     self.profilePage.frame = content;
+    self.discoverPage.frame = content;
     self.playerBar.frame = CGRectMake(0, h - playerH, w, playerH);
     [self layoutPlayerBar];
 }
 
 - (void)reload {
-    BOOL isPlayer  = (self.tab == NEPanelTabPlayer);
-    BOOL isProfile = (self.tab == NEPanelTabProfile);
-    BOOL isSearch  = (self.tab == NEPanelTabSearch);
+    BOOL isPlayer   = (self.tab == NEPanelTabPlayer);
+    BOOL isProfile  = (self.tab == NEPanelTabProfile);
+    BOOL isSearch   = (self.tab == NEPanelTabSearch);
+    BOOL isDiscover = (self.tab == NEPanelTabDiscover);
 
-    self.playerPage.hidden  = !isPlayer;
-    self.profilePage.hidden = !isProfile;
-    self.table.hidden = (isPlayer || isProfile);
+    self.playerPage.hidden   = !isPlayer;
+    self.profilePage.hidden  = !isProfile;
+    self.discoverPage.hidden = !isDiscover;
+    // 发现页自带列表；只有在「看某个歌单的曲目」时才切回 table
+    BOOL showTable = isSearch || (isDiscover && self.songs.count > 0 && self.currentPlaylistTitle.length > 0);
+    self.table.hidden = !showTable;
     self.searchBar.hidden = !isSearch;
+
+    if (isDiscover) {
+        if (showTable) {
+            // 展示歌单曲目
+        } else {
+            [self.discoverPage reloadData];
+            return;
+        }
+    }
 
     if (isPlayer) {
         [self.playerPage refresh];
@@ -261,6 +277,34 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     [self reload];
 }
 
+#pragma mark - NEDiscoverPageDelegate
+
+- (void)discoverPage:(id)page didOpenPlaylistID:(NSString *)playlistID title:(NSString *)title {
+    if (!playlistID.length) return;
+    self.currentPlaylistTitle = title;
+    self.loading = YES;
+    [self reload];
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchPlaylistSongs:playlistID complete:^(NSArray<NESong *> *songs, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.loading = NO;
+        self.songs = error ? @[] : songs;
+        self.hint = error ? error.localizedDescription
+                          : [NSString stringWithFormat:@"%@ · %lu 首", title ?: @"", (unsigned long)songs.count];
+        [self reload];
+    }];
+}
+
+- (void)discoverPage:(id)page didPlaySong:(NESong *)song {
+    if (!song) return;
+    [[NEPlayer shared] playQueue:@[song] atIndex:0];
+    self.tab = NEPanelTabPlayer;
+    [self highlightTab];
+    [self reload];
+}
+
 #pragma mark - NEProfilePageDelegate
 
 - (void)profilePage:(id)page didSelectPlaylist:(NEPlaylist *)playlist {
@@ -316,6 +360,11 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _profilePage.hidden = YES;
     _profilePage.delegate = self;
     [self addSubview:_profilePage];
+
+    _discoverPage = [[NEDiscoverPage alloc] initWithFrame:CGRectZero];
+    _discoverPage.hidden = YES;
+    _discoverPage.delegate = self;
+    [self addSubview:_discoverPage];
 }
 
 #pragma mark - 播放条

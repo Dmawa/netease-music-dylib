@@ -245,7 +245,12 @@
         [self.content addSubview:v];
         [self.lineViews addObject:v];
     }
+
+    // 立即排版：把 layoutDone 复位后同步走一次 layoutSubviews，
+    // 保证歌词加载完当帧就能显示，不需要用户手动刷新
+    self.layoutDone = NO;
     [self setNeedsLayout];
+    [self layoutIfNeeded];
 }
 
 #pragma mark - 布局（只在尺寸变化时做一次）
@@ -262,6 +267,15 @@
 
     CGFloat w = self.bounds.size.width;
     CGFloat h = self.bounds.size.height;
+    // 页面还没显示时尺寸为 0，此时排版会算出错误高度，
+    // 保持 layoutDone = NO，等真正出现时再排一次
+    if (w < 1 || h < 1) {
+        self.layoutDone = NO;
+        return;
+    }
+    // 注意：歌词是异步加载的，加载完成时 view 尺寸没有变化，
+    // 如果这里直接 return，新歌词永远排不上版（所有行高度为 0）。
+    // 因此用 layoutDone 标记「是否需要强制重排」。
     if (self.layoutDone &&
         fabs(w - self.lastLayoutWidth) < 0.5 &&
         fabs(h - self.lastLayoutHeight) < 0.5) {

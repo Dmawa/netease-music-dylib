@@ -9,6 +9,9 @@
 @implementation NEPlaylist
 @end
 
+@implementation NERecommendItem
+@end
+
 @implementation NEApi
 
 + (instancetype)shared {
@@ -230,6 +233,82 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         for (NEPlaylist *p in list) {
             // 只保留普通歌单（排除「喜欢的音乐」和年度歌单 specialType=20）
             if (p.specialType == 0) [out addObject:p];
+        }
+        complete(out, nil);
+    }];
+}
+
+#pragma mark - 发现页
+
+- (void)fetchRecommendPlaylists:(NSInteger)limit complete:(void (^)(NSArray<NERecommendItem *> *, NSError *))complete {
+    NSString *path = [NSString stringWithFormat:@"/api/personalized/playlist?limit=%ld", (long)MAX(1, limit)];
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSArray *arr = json[@"result"];
+        NSMutableArray *out = [NSMutableArray array];
+        if ([arr isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *d in arr) {
+                if (![d isKindOfClass:[NSDictionary class]]) continue;
+                NERecommendItem *it = [NERecommendItem new];
+                it.itemID = [d[@"id"] description] ?: @"";
+                it.title = d[@"name"] ?: @"";
+                it.coverURL = d[@"picUrl"] ?: @"";
+                it.kind = 0;
+                NSNumber *cnt = d[@"trackCount"];
+                it.subtitle = [cnt isKindOfClass:[NSNumber class]]
+                    ? [NSString stringWithFormat:@"%ld 首", (long)cnt.integerValue] : @"";
+                if (it.itemID.length) [out addObject:it];
+            }
+        }
+        complete(out, nil);
+    }];
+}
+
+- (void)fetchRecommendNewSongs:(NSInteger)limit complete:(void (^)(NSArray<NERecommendItem *> *, NSError *))complete {
+    NSString *path = [NSString stringWithFormat:@"/api/personalized/newsong?limit=%ld", (long)MAX(1, limit)];
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSArray *arr = json[@"result"];
+        NSMutableArray *out = [NSMutableArray array];
+        if ([arr isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *d in arr) {
+                NSDictionary *song = d[@"song"];
+                if (![song isKindOfClass:[NSDictionary class]]) song = d;
+                if (![song isKindOfClass:[NSDictionary class]]) continue;
+                NERecommendItem *it = [NERecommendItem new];
+                it.itemID = [song[@"id"] description] ?: @"";
+                it.title = song[@"name"] ?: @"";
+                NSArray *ar = song[@"artists"];
+                if (![ar isKindOfClass:[NSArray class]]) ar = song[@"ar"];
+                it.subtitle = [ar isKindOfClass:[NSArray class]] ? NEArtistsString(ar) : @"";
+                NSString *pic = song[@"picUrl"];
+                if (![pic isKindOfClass:[NSString class]] || !pic.length)
+                    pic = d[@"picUrl"];
+                it.coverURL = pic ?: @"";
+                it.kind = 1;
+                if (it.itemID.length) [out addObject:it];
+            }
+        }
+        complete(out, nil);
+    }];
+}
+
+- (void)fetchToplists:(void (^)(NSArray<NERecommendItem *> *, NSError *))complete {
+    [[NESession shared] GET:@"/api/toplist/detail" params:nil complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSArray *arr = json[@"list"];
+        NSMutableArray *out = [NSMutableArray array];
+        if ([arr isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *d in arr) {
+                if (![d isKindOfClass:[NSDictionary class]]) continue;
+                NERecommendItem *it = [NERecommendItem new];
+                it.itemID = [d[@"id"] description] ?: @"";
+                it.title = d[@"name"] ?: @"";
+                it.coverURL = d[@"coverImgUrl"] ?: @"";
+                it.subtitle = d[@"updateFrequency"] ?: @"";
+                it.kind = 0;
+                if (it.itemID.length) [out addObject:it];
+            }
         }
         complete(out, nil);
     }];

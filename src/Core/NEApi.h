@@ -20,6 +20,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *streamURL;
 @end
 
+/// 推荐卡片（歌单 / 新歌 / 电台 通用）
+@interface NERecommendItem : NSObject
+@property (nonatomic, copy) NSString *itemID;
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *subtitle;
+@property (nonatomic, copy) NSString *coverURL;
+/// 0=歌单 1=新歌 2=电台
+@property (nonatomic, assign) NSInteger kind;
+@end
+
 @interface NEPlaylist : NSObject
 @property (nonatomic, copy) NSString *playlistID;
 @property (nonatomic, copy) NSString *name;
@@ -66,6 +76,19 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)fetchLikedPlaylist:(void (^)(NEPlaylist * _Nullable playlist, NSError * _Nullable error))complete;
 /// 我创建/收藏的歌单（排除年度歌单等特殊类型）
 - (void)fetchMyCollectedPlaylists:(void (^)(NSArray<NEPlaylist *> * _Nullable, NSError * _Nullable))complete;
+
+#pragma mark 发现页
+/// 推荐歌单
+- (void)fetchRecommendPlaylists:(NSInteger)limit
+                       complete:(void (^)(NSArray<NERecommendItem *> * _Nullable,
+                                          NSError * _Nullable))complete;
+/// 推荐新歌
+- (void)fetchRecommendNewSongs:(NSInteger)limit
+                      complete:(void (^)(NSArray<NERecommendItem *> * _Nullable,
+                                         NSError * _Nullable))complete;
+/// 排行榜（前若干个榜单的名称与封面）
+- (void)fetchToplists:(void (^)(NSArray<NERecommendItem *> * _Nullable,
+                                NSError * _Nullable))complete;
 - (void)fetchPlaylistSongs:(NSString *)playlistID complete:(NESongsBlock)complete;
 
 #pragma mark 播放
