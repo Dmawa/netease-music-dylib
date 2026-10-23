@@ -452,6 +452,20 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     [self.profilePage reloadData];
 }
 
+- (void)settingsPageDidRequestSwitchAccount:(id)page {
+    [[NEApi shared] logout];
+    self.settingsPage.hidden = YES;
+    [self loadAccountThenDiscover];
+    [self.profilePage reloadData];
+    // 登出后直接弹登录（扫码 / 其他登录方式）
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (self) [self showLogin];
+    });
+}
+
 #pragma mark - 播放条
 
 - (void)buildPlayerBar {

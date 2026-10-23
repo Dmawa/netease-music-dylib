@@ -1,5 +1,5 @@
 //  NESettingsPage.h
-//  设置页：账号信息、VIP、消息、关于、退出登录
+//  设置面板（对应网易云「我的」抽屉）：账号/VIP/消息/云贝/设置项/关于/退出登录
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -7,6 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol NESettingsPageDelegate <NSObject>
 - (void)settingsPageDidClose:(id)page;
 - (void)settingsPageDidLogout:(id)page;
+/// 切换账号：登出后立即打开登录
+- (void)settingsPageDidRequestSwitchAccount:(id)page;
 @end
 
 @interface NESettingsPage : UIView

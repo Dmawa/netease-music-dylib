@@ -135,7 +135,8 @@
     [_accountHeader addSubview:_vipLabel];
 
     _gearBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_gearBtn setImage:[UIImage systemImageNamed:@"gearshape"] forState:UIControlStateNormal];
+    // 三条杠（☰）：网易云里就是它打开「我的」设置抽屉
+    [_gearBtn setImage:[UIImage systemImageNamed:@"line.horizontal.3"] forState:UIControlStateNormal];
     _gearBtn.tintColor = NE_TEXT_DIM;
     [_gearBtn addTarget:self action:@selector(gearTapped) forControlEvents:UIControlEventTouchUpInside];
     [_accountHeader addSubview:_gearBtn];
