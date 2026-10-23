@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40011960607](https://github.com/Dmawa/netease-music-dylib/actions/runs/40011960607) ✅（三个 job 全绿）
-- 最新版本：v0.5.1（扫码 8821 修复）
+- 最近一次 CI：run [40014401106](https://github.com/Dmawa/netease-music-dylib/actions/runs/40014401106) ✅（三个 job 全绿）
+- 最新版本：v0.5.2（扫码登录改用官方 /weapi 加密接口）
 
 ## 设计边界
 
@@ -23,7 +23,10 @@
 ## 功能
 
 - **悬浮球**：可拖动、松手吸边；点击展开面板。面板可拖动、iPad 右下角可缩放。
-- **登录**：二维码扫码（801 等待 / 802 已扫 / 803 成功 / 800 过期 / 8821 风控兜底），
+- **登录**：二维码扫码（801 等待 / 802 已扫 / 803 成功 / 800 过期），
+  走官方 web 同一套 **/weapi 加密接口**（AES-128-CBC + RSA-1024），
+  不是为了炫技——明文 `/api/login/qrcode/*` 会被服务端当成旧版客户端，
+  扫码确认后回 8821「请切换其他登录方式或升级新版本再试」。
   成功后向服务端确认登录态，不靠本地 Cookie 猜测；界面内直接显示诊断信息。
 - **发现**：快捷入口（每日推荐、排行榜已接通；私人漫游 / 心动模式 / 私人雷达
   仍是占位）、推荐歌单、最近热门新歌。
@@ -40,7 +43,8 @@
 src/
   NEEntry.m            构造器入口：等宿主 scene 就绪 → 挂窗口 → 装浮层
   Core/
-    NESession.{h,m}    HTTP 会话、Cookie 持久化（MUSIC_U / __csrf）
+    NESession.{h,m}    HTTP 会话、Cookie 持久化（MUSIC_U / __csrf）、weapi POST
+    NECrypto.{h,m}     weapi 加密：AES-128-CBC 两层 + RSA-1024（与官方 asrsea 等价）
     NEApi.{h,m}        网易云接口：扫码/账号/搜索/歌单/榜单/播放地址/歌词
     NEPlayer.{h,m}     AVPlayer 队列、后台播放、锁屏控制、中断处理
     NELyric.{h,m}      lrc / tlyric / yrc 解析与二分查找
@@ -122,8 +126,8 @@ python3 -c "import lief; b=lief.MachO.parse('Player.dylib'); print(b.size, [str(
 扫码不成功时的排查顺序：
 
 1. 看登录页状态文字：现在会显示 `<服务端原话>（状态码）`；
-2. 8821 是扫码确认瞬间的临时码，客户端会继续轮询直到 803/800，
-   期间若一直不消失，把 `poll raw` 那几行发出来；
+2. 8821 是「客户端被判成旧版」的信号：v0.5.2 之前走明文 `/api` 会出现，
+   v0.5.2 已改用官方 `/weapi` 加密接口；若仍出现，把 `poll raw` 那几行发出来；
 3. 803 之后仍失败，界面会区分「没收到 Cookie / 缺 MUSIC_U / MUSIC_U 不认」，
    对应服务端没下发凭证、Cookie 被系统拦下、凭证被判定无效三种情况。
 
