@@ -64,10 +64,10 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)configureTitle:(NSString *)title sub:(NSString *)sub cover:(NSString *)coverURL {
-    _titleLabel.text = title ?: @"";
-    _subLabel.text = sub ?: @"";
+    _titleLabel.text = [title isKindOfClass:[NSString class]] ? title : @"";
+    _subLabel.text = [sub isKindOfClass:[NSString class]] ? sub : @"";
     _cover.image = nil;
-    if (coverURL.length) {
+    if ([coverURL isKindOfClass:[NSString class]] && coverURL.length) {
         __weak typeof(self) weakSelf = self;
         [[NEImageCache shared] loadImageWithURL:coverURL completion:^(UIImage *image) {
             if (image) weakSelf.cover.image = image;

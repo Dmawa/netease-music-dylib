@@ -3,6 +3,7 @@
 #import "NEAppInfo.h"
 #import "NEApi.h"
 #import "NEImageCache.h"
+#import "NECrashLog.h"
 
 typedef NS_ENUM(NSInteger, NESettingsAction) {
     NESettingsActionPlaceholder = 0,   // 暂未接入
@@ -11,6 +12,7 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     NESettingsActionAbout,
     NESettingsActionSwitchAccount,
     NESettingsActionLogout,
+    NESettingsActionCrashLog,
 };
 
 @interface NESettingsPage () <UITableViewDataSource, UITableViewDelegate>
@@ -81,18 +83,21 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
 }
 
 - (void)rebuildSections {
+    NSMutableArray<NSString *> *about = [@[@"我的客服", @"我的订单", @"分享网易云音乐", @"关于"] mutableCopy];
+    if (NECrashLogLast().length) [about addObject:@"上次崩溃"];
+
     if (self.loggedIn) {
         self.sections = @[
             @[@"我的消息", @"我的云贝", @"徽章中心", @"装扮中心"],
             @[@"边听边存", @"音乐黑名单", @"青少年模式", @"音乐闹钟"],
-            @[@"我的客服", @"我的订单", @"分享网易云音乐", @"关于"],
+            [about copy],
             @[@"手机专属邮箱", @"切换账号", @"退出登录"],
         ];
     } else {
         self.sections = @[
             @[@"我的消息", @"我的云贝", @"徽章中心", @"装扮中心"],
             @[@"边听边存", @"音乐黑名单", @"青少年模式", @"音乐闹钟"],
-            @[@"我的客服", @"我的订单", @"分享网易云音乐", @"关于"],
+            [about copy],
         ];
     }
 }
@@ -182,7 +187,8 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
         return;
     }
 
-    _nameLabel.text = self.profile[@"nickname"] ?: @"已登录";
+    id nick = self.profile[@"nickname"];
+    _nameLabel.text = [nick isKindOfClass:[NSString class]] && [nick length] ? nick : @"已登录";
     NSNumber *uid = self.profile[@"userId"];
     _uidLabel.text = uid ? [NSString stringWithFormat:@"ID：%@", uid] : @"";
 
@@ -267,6 +273,29 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     if (host) [host presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)showCrashLog {
+    NSString *info = NECrashLogLast();
+    if (!info.length) info = @"没有崩溃记录";
+    if (info.length > 1200) info = [info substringToIndex:1200];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"上次崩溃"
+        message:info preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *a) {
+        [UIPasteboard generalPasteboard].string = info;
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) {
+        NECrashLogClear();
+        [self rebuildSections];
+        [self.table reloadData];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+
+    UIViewController *host = [self topMostController];
+    if (host) [host presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)shareApp {
     NSString *text = [NSString stringWithFormat:@"%@ v%@（作者 %@）",
                       NE_APP_NAME, NE_APP_VERSION, NE_APP_AUTHOR];
@@ -343,6 +372,7 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     if ([title isEqualToString:@"我的消息"]) return NESettingsActionMessages;
     if ([title isEqualToString:@"分享网易云音乐"]) return NESettingsActionShare;
     if ([title isEqualToString:@"关于"]) return NESettingsActionAbout;
+    if ([title isEqualToString:@"上次崩溃"]) return NESettingsActionCrashLog;
     if ([title isEqualToString:@"切换账号"]) return NESettingsActionSwitchAccount;
     if ([title isEqualToString:@"退出登录"]) return NESettingsActionLogout;
     return NESettingsActionPlaceholder;
@@ -367,6 +397,9 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
             break;
         case NESettingsActionLogout:
             [self confirmLogoutWithSwitchAccount:NO];
+            break;
+        case NESettingsActionCrashLog:
+            [self showCrashLog];
             break;
         default:
             [self showAlertWithTitle:title message:@"该功能暂未接入"];

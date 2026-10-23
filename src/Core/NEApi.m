@@ -26,6 +26,13 @@
 
 #pragma mark - 数据映射
 
+/// 服务端常见 null/数字混用：统一转成安全字符串，避免 NSNull 进 UILabel 导致崩溃
+static NSString *NEString(id v) {
+    if ([v isKindOfClass:[NSString class]]) return v;
+    if ([v isKindOfClass:[NSNumber class]]) return [v stringValue];
+    return @"";
+}
+
 /// 搜索/详情返回的艺术家是数组；榜单是 ar 字段
 static NSString *NEArtistsString(NSArray *artists) {
     NSMutableArray *names = [NSMutableArray array];
@@ -40,8 +47,11 @@ static NESong *NESongFromJSON(NSDictionary *d) {
     NESong *s = [NESong new];
     id sid = d[@"id"];
     s.songID = sid ? [sid description] : @"";
-    s.name   = d[@"name"] ?: @"";
-    s.album  = d[@"album"][@"name"] ?: d[@"al"][@"name"] ?: @"";
+    s.name   = NEString(d[@"name"]);
+    NSString *albumName = @"";
+    if ([d[@"album"] isKindOfClass:[NSDictionary class]]) albumName = NEString(d[@"album"][@"name"]);
+    if (!albumName.length && [d[@"al"] isKindOfClass:[NSDictionary class]]) albumName = NEString(d[@"al"][@"name"]);
+    s.album = albumName;
 
     NSArray *artists = d[@"artists"] ?: d[@"ar"];
     if ([artists isKindOfClass:[NSArray class]]) s.artist = NEArtistsString(artists);
@@ -51,12 +61,10 @@ static NESong *NESongFromJSON(NSDictionary *d) {
     //   cloudsearch/pc -> al.picUrl
     //   playlist/detail & song/detail -> album.picUrl
     //   search/get -> 只有 album.picId（缺加密串，拼不出来，只能留空）
-    NSString *cover = d[@"al"][@"picUrl"];
-    if (![cover isKindOfClass:[NSString class]] || !cover.length)
-        cover = d[@"album"][@"picUrl"];
-    if (![cover isKindOfClass:[NSString class]] || !cover.length)
-        cover = d[@"picUrl"];
-    if (![cover isKindOfClass:[NSString class]]) cover = @"";
+    NSString *cover = @"";
+    if ([d[@"al"] isKindOfClass:[NSDictionary class]]) cover = NEString(d[@"al"][@"picUrl"]);
+    if (!cover.length && [d[@"album"] isKindOfClass:[NSDictionary class]]) cover = NEString(d[@"album"][@"picUrl"]);
+    if (!cover.length) cover = NEString(d[@"picUrl"]);
     // 网易云有时给 http，iOS ATS 默认拦截，统一升级到 https
     if ([cover hasPrefix:@"http://"]) {
         cover = [@"https://" stringByAppendingString:[cover substringFromIndex:7]];
@@ -179,7 +187,7 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
             complete(NO, nil, nil);
             return;
         }
-        complete(YES, profile[@"nickname"] ?: @"", profile[@"avatarUrl"] ?: @"");
+        complete(YES, NEString(profile[@"nickname"]), NEString(profile[@"avatarUrl"]));
     }];
 }
 
@@ -189,7 +197,7 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
         if (error) { complete(nil, nil, error); return; }
         NSDictionary *profile = json[@"profile"];
         if (![profile isKindOfClass:[NSDictionary class]]) { complete(nil, nil, nil); return; }
-        complete(profile[@"nickname"] ?: @"", profile[@"avatarUrl"] ?: @"", nil);
+        complete(NEString(profile[@"nickname"]), NEString(profile[@"avatarUrl"]), nil);
     }];
 }
 
@@ -263,14 +271,14 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 if (![d isKindOfClass:[NSDictionary class]]) continue;
                 NEPlaylist *p = [NEPlaylist new];
                 p.playlistID = [d[@"id"] description] ?: @"";
-                p.name = d[@"name"] ?: @"";
-                p.coverURL = d[@"coverImgUrl"] ?: @"";
+                p.name = NEString(d[@"name"]);
+                p.coverURL = NEString(d[@"coverImgUrl"]);
                 p.trackCount = [d[@"trackCount"] integerValue];
                 p.specialType = [d[@"specialType"] integerValue];
-                NSNumber *cid = d[@"creator"][@"userId"];
+                NSDictionary *creatorInfo = [d[@"creator"] isKindOfClass:[NSDictionary class]] ? d[@"creator"] : nil;
+                NSNumber *cid = creatorInfo[@"userId"];
                 p.creatorID = [cid isKindOfClass:[NSNumber class]] ? cid.integerValue : 0;
-                NSString *creator = d[@"creator"][@"nickname"];
-                p.creatorName = [creator isKindOfClass:[NSString class]] ? creator : @"";
+                p.creatorName = NEString(creatorInfo[@"nickname"]);
                 p.playCount = [d[@"playCount"] integerValue];
                 if (p.playlistID.length) [out addObject:p];
             }
@@ -325,9 +333,9 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
             for (NSDictionary *d in arr) {
                 if (![d isKindOfClass:[NSDictionary class]]) continue;
                 NERecommendItem *it = [NERecommendItem new];
-                it.itemID = [d[@"id"] description] ?: @"";
-                it.title = d[@"name"] ?: @"";
-                it.coverURL = d[@"picUrl"] ?: @"";
+                it.itemID = d[@"id"] ? [d[@"id"] description] : @"";
+                it.title = NEString(d[@"name"]);
+                it.coverURL = NEString(d[@"picUrl"]);
                 it.kind = 0;
                 NSNumber *cnt = d[@"trackCount"];
                 it.subtitle = [cnt isKindOfClass:[NSNumber class]]
@@ -351,15 +359,14 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
                 if (![song isKindOfClass:[NSDictionary class]]) song = d;
                 if (![song isKindOfClass:[NSDictionary class]]) continue;
                 NERecommendItem *it = [NERecommendItem new];
-                it.itemID = [song[@"id"] description] ?: @"";
-                it.title = song[@"name"] ?: @"";
+                it.itemID = song[@"id"] ? [song[@"id"] description] : @"";
+                it.title = NEString(song[@"name"]);
                 NSArray *ar = song[@"artists"];
                 if (![ar isKindOfClass:[NSArray class]]) ar = song[@"ar"];
                 it.subtitle = [ar isKindOfClass:[NSArray class]] ? NEArtistsString(ar) : @"";
-                NSString *pic = song[@"picUrl"];
-                if (![pic isKindOfClass:[NSString class]] || !pic.length)
-                    pic = d[@"picUrl"];
-                it.coverURL = pic ?: @"";
+                NSString *pic = NEString(song[@"picUrl"]);
+                if (!pic.length) pic = NEString(d[@"picUrl"]);
+                it.coverURL = pic;
                 it.kind = 1;
                 if (it.itemID.length) [out addObject:it];
             }
@@ -377,10 +384,10 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
             for (NSDictionary *d in arr) {
                 if (![d isKindOfClass:[NSDictionary class]]) continue;
                 NERecommendItem *it = [NERecommendItem new];
-                it.itemID = [d[@"id"] description] ?: @"";
-                it.title = d[@"name"] ?: @"";
-                it.coverURL = d[@"coverImgUrl"] ?: @"";
-                it.subtitle = d[@"updateFrequency"] ?: @"";
+                it.itemID = d[@"id"] ? [d[@"id"] description] : @"";
+                it.title = NEString(d[@"name"]);
+                it.coverURL = NEString(d[@"coverImgUrl"]);
+                it.subtitle = NEString(d[@"updateFrequency"]);
                 it.kind = 0;
                 if (it.itemID.length) [out addObject:it];
             }

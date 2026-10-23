@@ -245,7 +245,9 @@
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || ![profile isKindOfClass:[NSDictionary class]]) return;
 
-        self.nameLabel.text = profile[@"nickname"] ?: @"已登录";
+        id nickname = profile[@"nickname"];
+        self.nameLabel.text = [nickname isKindOfClass:[NSString class]] && [nickname length]
+            ? nickname : @"已登录";
         NSInteger vipType = [profile[@"vipType"] integerValue];
         self.vipLabel.text = (vipType == 11) ? @"SVIP · 黑胶会员" : (vipType == 1 ? @"音乐包" : @"普通用户");
 

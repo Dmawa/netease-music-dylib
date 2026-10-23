@@ -9,6 +9,7 @@
 #import <UIKit/UIKit.h>
 #import "NEFloatingBall.h"
 #import "NEMainPanel.h"
+#import "NECrashLog.h"
 
 @interface NEEntry : NSObject
 + (void)launch;
@@ -16,6 +17,7 @@
 
 __attribute__((constructor))
 static void NEMusicBootstrap(void) {
+    NECrashLogInstall();
     // 构造器可能在非主线程/极早期执行，统一挪到主队列且等 App 起来
     dispatch_async(dispatch_get_main_queue(), ^{
         [NEEntry launch];

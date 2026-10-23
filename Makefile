@@ -14,6 +14,7 @@ LIBRARY_NAME = Player
 Player_FILES = src/NEEntry.m \
                src/Core/NESession.m \
                src/Core/NECrypto.m \
+               src/Core/NECrashLog.m \
                src/Core/NEApi.m \
                src/Core/NEPlayer.m \
                src/Core/NELyric.m \
