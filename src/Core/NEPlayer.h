@@ -13,9 +13,6 @@ extern NSString *const NEPlayerProgressNotification;
 /// 播放队列变化（增删/清空）
 extern NSString *const NEPlayerQueueChangedNotification;
 
-/// 最近播放（最多 100 首，按时间倒序）
-@property (nonatomic, strong, readonly) NSArray<NESong *> *history;
-
 typedef NS_ENUM(NSInteger, NEPlayMode) {
     NEPlayModeListLoop = 0,   // 列表循环
     NEPlayModeSingleLoop,     // 单曲循环
@@ -33,6 +30,8 @@ typedef NS_ENUM(NSInteger, NEPlayMode) {
 @property (nonatomic, assign, readonly) BOOL isPlaying;
 @property (nonatomic, assign, readonly) double currentTime;
 @property (nonatomic, assign, readonly) double duration;
+/// 最近播放（最多 100 首，按时间倒序）
+@property (nonatomic, strong, readonly) NSArray<NESong *> *history;
 
 /// 播放整个列表，index 指定起点
 - (void)playQueue:(NSArray<NESong *> *)songs atIndex:(NSInteger)index;
