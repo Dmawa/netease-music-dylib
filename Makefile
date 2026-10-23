@@ -22,7 +22,7 @@ Player_CFLAGS = -fobjc-arc -fblocks \
                 -I src -I src/Core -I src/UI -I src/Support \
                 -Wall -Wno-unused-parameter
 
-Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics
+Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics CoreMedia AudioToolbox
 Player_LIBRARIES  = sqlite3
 
 include $(THEOS)/makefiles/common.mk
