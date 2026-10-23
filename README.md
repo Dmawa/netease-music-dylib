@@ -6,7 +6,7 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40006858461](https://github.com/Dmawa/netease-music-dylib/actions/runs/40006858461) ✅（三个 job 全绿）
+- 最近一次 CI：run [40009734116](https://github.com/Dmawa/netease-music-dylib/actions/runs/40009734116) ✅（三个 job 全绿）
 
 ## 设计边界
 
@@ -101,7 +101,8 @@ python3 scripts/inject.py --ipa 宿主.ipa --dylib Player.dylib --out dist
    `Player.dylib` 必须真的在 `.app` 里（不通过就红）；
 4. 打包 IPA，产物 `NEMusicShell.ipa` 可下载。
 
-最近一次产物：`Player.dylib` 1.1 MB（arm64 + arm64e），`NEMusicShell.ipa` 364 KB。
+最近一次产物：`Player.dylib` 1.17 MB（arm64 + arm64e，ad-hoc 已签名），
+`NEMusicShell.ipa` 362 KB。
 本机可复核：
 
 ```bash

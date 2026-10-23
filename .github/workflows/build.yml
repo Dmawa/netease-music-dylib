@@ -3,6 +3,8 @@ name: build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'          # 纯文档改动不必占用 macOS runner
   workflow_dispatch:
     inputs:
       ipa:
