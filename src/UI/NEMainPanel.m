@@ -7,15 +7,15 @@
 #import "NEProfilePage.h"
 #import "NEDiscoverPage.h"
 #import "NESidebar.h"
+#import "NELoginView.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
-    NEPanelTabDiscover = 0,   // 推荐/发现
+    NEPanelTabDiscover = 0,   // 推荐/发现（也是搜索结果页）
     NEPanelTabProfile,        // 我的（收藏）
-    NEPanelTabSearch,
-    NEPanelTabPlayer,
+    NEPanelTabPlayer,         // 正在播放
 };
 
-@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate>
+@interface NEMainPanel () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, NEProfilePageDelegate, NEDiscoverPageDelegate, NESidebarDelegate, NELoginViewDelegate>
 @property (nonatomic, assign) NEPanelTab tab;
 @property (nonatomic, strong) UIView *headerBar;
 @property (nonatomic, strong) NESidebar *sidebar;
@@ -38,7 +38,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) NSArray<NESong *> *songs;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
-@property (nonatomic, strong, nullable) UIViewController *loginVC;
+@property (nonatomic, strong, nullable) NELoginView *loginView;
 
 @end
 
@@ -107,10 +107,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     NESidebarItem *i1 = [NESidebarItem new];
     i1.title = @"我的"; i1.iconName = @"person"; i1.iconNameSelected = @"person.fill"; i1.tag = 1;
     NESidebarItem *i2 = [NESidebarItem new];
-    i2.title = @"搜索"; i2.iconName = @"magnifyingglass"; i2.tag = 2;
-    NESidebarItem *i3 = [NESidebarItem new];
-    i3.title = @"播放"; i3.iconName = @"play.circle"; i3.iconNameSelected = @"play.circle.fill"; i3.tag = 3;
-    _sidebar.items = @[i0, i1, i2, i3];
+    i2.title = @"播放"; i2.iconName = @"play.circle"; i2.iconNameSelected = @"play.circle.fill"; i2.tag = 2;
+    _sidebar.items = @[i0, i1, i2];
     _sidebar.selectedIndex = 0;
     [self addSubview:_sidebar];
 
@@ -212,20 +210,16 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)reload {
     BOOL isPlayer   = (self.tab == NEPanelTabPlayer);
     BOOL isProfile  = (self.tab == NEPanelTabProfile);
-    BOOL isSearch   = (self.tab == NEPanelTabSearch);
     BOOL isDiscover = (self.tab == NEPanelTabDiscover);
 
     self.playerPage.hidden   = !isPlayer;
     self.profilePage.hidden  = !isProfile;
     self.discoverPage.hidden = !isDiscover;
     // 发现页自带列表；只有在「看某个歌单的曲目」时才切回 table
-    BOOL showTable = isSearch || (isDiscover && self.songs.count > 0 && self.currentPlaylistTitle.length > 0);
+    // 搜索结果、歌单曲目都在发现页用 table 展示
+    BOOL showTable = (isDiscover && self.songs.count > 0);
     self.table.hidden = !showTable;
 
-    // 搜索 tab 直接用 table 展示结果
-    if (isSearch) {
-        self.table.hidden = NO;
-    }
     if (isDiscover) {
         if (showTable) {
             // 展示歌单曲目
@@ -360,14 +354,40 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)searchBarSearchButtonClicked:(UISearchBar *)bar {
     if (bar != self.topSearch) return;
     [bar resignFirstResponder];
-    NSString *kw = bar.text;
-    if (!kw.length) return;
+
+    NSString *kw = [bar.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+    if (!kw.length) {
+        self.songs = @[];
+        self.currentPlaylistTitle = nil;
+        self.hint = @"";
+        self.tab = NEPanelTabDiscover;
+        [self highlightTab];
+        [self reload];
+        return;
+    }
+
+    // search merged into the top search bar
+    self.tab = NEPanelTabDiscover;
+    [self highlightTab];
+    self.currentPlaylistTitle = [NSString stringWithFormat:@"搜索：%@", kw];
+    self.songs = @[];
     self.loading = YES;
     [self reload];
-    [[NEApi shared] searchSongs:kw limit:30 complete:^(NSArray<NESong *> *songs, NSError *error) {
+
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] searchSongs:kw limit:50 complete:^(NSArray<NESong *> *songs, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
         self.loading = NO;
-        if (error) { self.hint = error.localizedDescription; self.songs = @[]; [self reload]; return; }
-        self.songs = songs;
+        if (error) {
+            self.songs = @[];
+            self.hint = error.localizedDescription;
+        } else {
+            self.songs = songs;
+            self.hint = songs.count
+                ? [NSString stringWithFormat:@"“%@” \u00b7 %lu 个结果", kw, (unsigned long)songs.count]
+                : [NSString stringWithFormat:@"没有找到“%@”", kw];
+        }
         [self reload];
     }];
 }
@@ -468,6 +488,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 #pragma mark - 登录（二维码）
 
 - (void)showLogin {
+    // 已登录：给退出入口
     if ([[NEApi shared] isLoggedIn]) {
         UIAlertController *a = [UIAlertController alertControllerWithTitle:@"已登录"
             message:@"是否退出当前账号？" preferredStyle:UIAlertControllerStyleAlert];
@@ -482,88 +503,50 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     }
 
     UIViewController *vc = [UIViewController new];
-    vc.view.backgroundColor = NE_BG;
+    vc.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    vc.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
 
-    UILabel *tip = [[UILabel alloc] initWithFrame:CGRectMake(20, 30, 280, 22)];
-    tip.text = @"网易云音乐扫码登录";
-    tip.textColor = NE_TEXT;
-    tip.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    [vc.view addSubview:tip];
+    NELoginView *login = [[NELoginView alloc] initWithFrame:CGRectZero];
+    login.delegate = self;
+    [vc.view addSubview:login];
+    self.loginView = login;
 
-    UIImageView *qr = [[UIImageView alloc] initWithFrame:CGRectMake(90, 70, 180, 180)];
-    qr.backgroundColor = UIColor.whiteColor;
-    qr.contentMode = UIViewContentModeScaleAspectFit;
-    [vc.view addSubview:qr];
+    // 居中卡片，宽高自适应
+    CGFloat maxW = 360, maxH = 520;
+    CGSize screen = vc.view.bounds.size;
+    CGFloat w = MIN(maxW, screen.width - 60);
+    CGFloat h = MIN(maxH, screen.height - 120);
+    login.frame = CGRectMake((screen.width - w) / 2, (screen.height - h) / 2, w, h);
+    login.autoresizingMask = UIViewAutoresizingFlexibleTopMargin |
+                             UIViewAutoresizingFlexibleBottomMargin |
+                             UIViewAutoresizingFlexibleLeftMargin |
+                             UIViewAutoresizingFlexibleRightMargin;
 
-    UILabel *status = [[UILabel alloc] initWithFrame:CGRectMake(20, 262, 280, 60)];
-    status.numberOfLines = 0;
-    status.textAlignment = NSTextAlignmentCenter;
-    status.textColor = NE_TEXT_DIM;
-    status.font = [UIFont systemFontOfSize:12];
-    status.text = @"正在获取二维码…";
-    [vc.view addSubview:status];
-
-    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
-    close.frame = CGRectMake(20, 330, 280, 40);
-    [close setTitle:@"关闭" forState:UIControlStateNormal];
-    [close addTarget:self action:@selector(closeLoginVC) forControlEvents:UIControlEventTouchUpInside];
-    [vc.view addSubview:close];
-    self.loginVC = vc;
-
-    [[NEApi shared] requestQRKey:^(NSString *unikey, NSError *error) {
-        if (!unikey) { status.text = error.localizedDescription; return; }
-        // 二维码由本地生成：网易云没有可直连的图片接口，
-        // 服务端页面是靠前端 JS 画出来的，所以这里用自带编码器绘制
-        NSString *content = [NSString stringWithFormat:
-            @"https://music.163.com/login?codekey=%@", unikey];
-        UIImage *img = [NEQRCode imageWithText:content size:180];
-        qr.image = img;
-        status.text = img ? @"请用网易云 App 扫描上方二维码" : @"二维码生成失败";
-        [self pollLoginWith:unikey status:status];
-    }];
-
-    UIViewController *top = [self topMostViewController];
-    [top presentViewController:vc animated:YES completion:nil];
-}
-
-- (void)pollLoginWith:(NSString *)unikey status:(UILabel *)status {
-    // 登录页已被关闭就停止轮询，避免后台无限请求
-    if (!self.loginVC) return;
-    [[NEApi shared] pollQRCode:unikey complete:^(NSInteger code, NSString *nickname, NSError *error) {
-        if (!self.loginVC) return;
-        if (error) { status.text = error.localizedDescription; return; }
-        switch (code) {
-            case 800: status.text = @"二维码已过期"; return;
-            case 801: status.text = @"等待扫码…";   break;
-            case 802: status.text = @"已扫码，请在手机上确认"; break;
-            case 803: {
-                // 关键：803 之后服务端会下发 MUSIC_U，需要确认已经拿到并落盘，
-                // 否则「登录成功」只是假象，重启就掉登录。
-                if (![[NEApi shared] isLoggedIn]) {
-                    status.text = @"登录成功，但未取到登录凭证，正在重试…";
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
-                                   dispatch_get_main_queue(), ^{
-                        [self pollLoginWith:unikey status:status];
-                    });
-                    return;
-                }
-                status.text = @"登录成功";
-                [self loadAccountThenDiscover];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{ [self closeLoginVC]; });
-                return;
-            }
-            default:  status.text = [NSString stringWithFormat:@"状态 %ld", (long)code]; break;
-        }
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{ [self pollLoginWith:unikey status:status]; });
+    [[self topMostViewController] presentViewController:vc animated:YES completion:^{
+        [login start];
     }];
 }
 
-- (void)closeLoginVC {
-    UIViewController *vc = self.loginVC;
-    self.loginVC = nil;
-    [vc dismissViewControllerAnimated:YES completion:nil];
+#pragma mark - NELoginViewDelegate
+
+- (void)loginViewDidLogin:(id)view nickname:(NSString *)nickname {
+    [self dismissLoginAnimated];
+    [self loadAccountThenDiscover];
+    [self.profilePage reloadData];
+}
+
+- (void)loginViewDidCancel:(id)view {
+    [self dismissLoginAnimated];
+}
+
+- (void)dismissLoginAnimated {
+    [self.loginView stop];
+    UIViewController *vc = [self topMostViewController];
+    if (vc.presentingViewController) {
+        [vc dismissViewControllerAnimated:YES completion:nil];
+    }
+    self.loginView = nil;
 }
 
 #pragma mark - 找到当前最顶层 VC（iOS13 起 keyWindow 不可靠）

@@ -23,6 +23,7 @@ Player_FILES = src/NEEntry.m \
                src/UI/NEProfilePage.m \
                src/UI/NEDiscoverPage.m \
                src/UI/NESidebar.m \
+               src/UI/NELoginView.m \
                src/UI/NELyricView.m \
                src/UI/NEQRCode.m
 
