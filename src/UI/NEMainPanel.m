@@ -317,6 +317,18 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     [self reload];
 }
 
+- (void)discoverPage:(id)page didLoadSongs:(NSArray<NESong *> *)songs title:(NSString *)title {
+    if (!songs.count) return;
+    self.currentPlaylistTitle = title;
+    self.songs = songs;
+    self.browsingList = YES;
+    self.loading = NO;
+    self.hint = [NSString stringWithFormat:@"%@ · %lu 首", title ?: @"", (unsigned long)songs.count];
+    self.tab = NEPanelTabDiscover;
+    [self highlightTab];
+    [self reload];
+}
+
 #pragma mark - NEProfilePageDelegate
 
 - (void)profilePage:(id)page didSelectPlaylist:(NEPlaylist *)playlist {

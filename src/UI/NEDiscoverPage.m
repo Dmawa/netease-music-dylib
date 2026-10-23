@@ -362,12 +362,20 @@
         return;
     }
     if (idx == 0) {
-        // 每日推荐需要登录
-        if (![[NEApi shared] isLoggedIn]) {
-            [self toast:@"每日推荐需要先登录"];
-            return;
-        }
-        [self toast:@"每日推荐需要登录后才能拉取"];
+        // 每日推荐：v3 接口，登录后按口味，未登录给一份通用推荐
+        [self toast:@"正在拉取每日推荐…"];
+        __weak typeof(self) weakSelf = self;
+        [[NEApi shared] fetchDailyRecommendSongs:^(NSArray<NESong *> *songs, NSError *error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (error || !songs.count) {
+                [self toast:error.localizedDescription ?: @"每日推荐暂时没有内容"];
+                return;
+            }
+            if ([self.delegate respondsToSelector:@selector(discoverPage:didLoadSongs:title:)]) {
+                [self.delegate discoverPage:self didLoadSongs:songs title:@"每日推荐"];
+            }
+        }];
         return;
     }
     [self toast:@"该入口暂未接入"];

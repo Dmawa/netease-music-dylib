@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)discoverPage:(id)page didOpenPlaylistID:(NSString *)playlistID title:(NSString *)title;
 /// 播放一首新歌
 - (void)discoverPage:(id)page didPlaySong:(NESong *)song;
+/// 拉到一整批歌曲（每日推荐等），交给面板按列表展示
+- (void)discoverPage:(id)page didLoadSongs:(NSArray<NESong *> *)songs title:(NSString *)title;
 @end
 
 @interface NEDiscoverPage : UIView

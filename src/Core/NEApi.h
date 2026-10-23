@@ -82,6 +82,8 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
 - (void)fetchLikedPlaylist:(void (^)(NEPlaylist * _Nullable playlist, NSError * _Nullable error))complete;
 /// 我创建/收藏的歌单（排除年度歌单等特殊类型）
 - (void)fetchMyCollectedPlaylists:(void (^)(NSArray<NEPlaylist *> * _Nullable, NSError * _Nullable))complete;
+/// 每日推荐（/api/v3/discovery/recommend/songs，未登录也会返回一份通用推荐）
+- (void)fetchDailyRecommendSongs:(NESongsBlock)complete;
 
 #pragma mark 发现页
 /// 推荐歌单

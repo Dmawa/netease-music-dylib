@@ -278,6 +278,18 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     }];
 }
 
+- (void)fetchDailyRecommendSongs:(NESongsBlock)complete {
+    // v3 接口；老的 /api/recommend/songs 已经 404，不要再用
+    [[NESession shared] GET:@"/api/v3/discovery/recommend/songs" params:nil
+                  complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSArray *daily = json[@"data"][@"dailySongs"];
+        if (![daily isKindOfClass:[NSArray class]]) daily = json[@"recommend"];
+        if (![daily isKindOfClass:[NSArray class]]) { complete(@[], nil); return; }
+        complete([NSArray arrayWithArray:NESongsFromArray(daily)], nil);
+    }];
+}
+
 #pragma mark - 发现页
 
 - (void)fetchRecommendPlaylists:(NSInteger)limit complete:(void (^)(NSArray<NERecommendItem *> *, NSError *))complete {
