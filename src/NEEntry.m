@@ -29,14 +29,18 @@ static void NEMusicBootstrap(void) {
     static NSInteger attempts = 0;
     UIApplication *app = [UIApplication sharedApplication];
     BOOL ready = (app != nil);
+
+    // 有活跃 scene 才算真正起来了：iOS 13 起 window 必须挂到 scene 上
+    UIWindowScene *activeScene = nil;
     if (@available(iOS 13.0, *)) {
-        // 有活跃 scene 才算真正起来了，否则 UIWindow 挂不上去
-        BOOL hasScene = NO;
         for (UIScene *s in app.connectedScenes) {
             if ([s isKindOfClass:[UIWindowScene class]] &&
-                s.activationState != UISceneActivationStateUnattached) { hasScene = YES; break; }
+                s.activationState != UISceneActivationStateUnattached) {
+                activeScene = (UIWindowScene *)s;
+                break;
+            }
         }
-        ready = ready && hasScene;
+        ready = ready && (activeScene != nil);
     }
     if (!ready) {
         attempts++;
@@ -54,6 +58,7 @@ static void NEMusicBootstrap(void) {
     installed = YES;
 
     NEFloatingBall *ball = [NEFloatingBall shared];
+    if (activeScene) [ball attachToScene:activeScene];   // iOS 13+ 必须
     NEMainPanel *panel = [[NEMainPanel alloc] initWithFrame:CGRectMake(0, 0, 320, 460)];
     [ball installPanelView:panel];
     [ball presentBall];

@@ -36,8 +36,7 @@ jobs:
               -Wall -Wno-unused-parameter -Wno-deprecated-declarations \
               -framework Foundation -framework UIKit -framework AVFoundation \
               -framework MediaPlayer -framework QuartzCore -framework CoreGraphics \
-              -framework CoreMedia -framework AudioToolbox \
-              -framework CoreText -framework CoreImage \
+              -framework CoreMedia \
               -install_name /usr/lib/Player.dylib \
               -o out/Player.$ARCH.dylib $SRCS
           done
@@ -103,6 +102,10 @@ jobs:
           python3 ../scripts/inject_app.py \
             --app Payload/NEMusicShell.app \
             --dylib ../out/Player.dylib
+          # 硬校验：加载指令和 dylib 都必须真的在包里，失败即红
+          test -f Payload/NEMusicShell.app/Player.dylib
+          otool -L Payload/NEMusicShell.app/NEMusicShell | grep -q '@executable_path/Player.dylib'
+          echo "==> 注入校验通过"
           cd ..
           # 重签：先内层 dylib，再整个 .app
           codesign --force --sign - shell/Payload/NEMusicShell.app/Player.dylib

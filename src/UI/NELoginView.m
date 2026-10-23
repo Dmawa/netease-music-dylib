@@ -167,7 +167,6 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             _refreshBtn.hidden = YES;
             [_spinner stopAnimating];
             _qrView.alpha = 0.5;
-            _statusLabel.textColor = NE_TEXT;
             break;
         case NELoginStateSuccess:
             _qrMask.hidden = NO;
@@ -175,7 +174,6 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             _refreshBtn.hidden = YES;
             [_spinner stopAnimating];
             _qrView.alpha = 0.5;
-            _statusLabel.textColor = NE_TEXT;
             break;
         case NELoginStateExpired:
             _qrMask.hidden = NO;
@@ -188,10 +186,18 @@ typedef NS_ENUM(NSInteger, NELoginState) {
             _maskLabel.text = @"加载失败\n点击重试";
             _refreshBtn.hidden = NO;
             [_spinner stopAnimating];
-            _statusLabel.textColor = [UIColor colorWithRed:1 green:0.45 blue:0.45 alpha:1];
             break;
     }
-    if (state != NELoginStateFailed) _statusLabel.textColor = NE_TEXT_DIM;
+
+    // 状态文字颜色：失败=红、已扫码/成功=白、其余=灰。
+    // （以前这里无条件写回灰色，把上面对白/红的设置全盖掉了。）
+    if (state == NELoginStateFailed) {
+        _statusLabel.textColor = [UIColor colorWithRed:1 green:0.45 blue:0.45 alpha:1];
+    } else if (state == NELoginStateScanned || state == NELoginStateSuccess) {
+        _statusLabel.textColor = NE_TEXT;
+    } else {
+        _statusLabel.textColor = NE_TEXT_DIM;
+    }
 }
 
 #pragma mark - 流程
@@ -213,6 +219,9 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 }
 
 - (void)requestNewCode {
+    // 刷新/重登时要把 stop 留下的标记清掉，否则新二维码不会开始轮询
+    self.stopped = NO;
+    self.polling = NO;
     [self applyState:NELoginStateLoading message:@"正在获取二维码…"];
     self.unikey = nil;
 

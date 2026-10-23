@@ -1,38 +1,66 @@
 # ne-music
 
-免越狱 iOS 网易云音乐悬浮播放器（dylib）。
+免越狱 iOS 网易云音乐悬浮播放器（dylib）。注入到目标 App 里即可使用；
+**不 hook 宿主任何代码**，不依赖 MobileSubstrate / Cydia Substrate / ElleKit，
+也不改宿主的类、方法或界面。
 
-注入到目标 App 的容器内即可使用；**不 hook 宿主任何代码**，不依赖 MobileSubstrate /
-Cydia Substrate / ElleKit，也不改动宿主的类、方法或界面。
+- 最低系统：iOS 13.0（arm64 / arm64e）
+- 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
+- 最近一次 CI：run [40006858461](https://github.com/Dmawa/netease-music-dylib/actions/runs/40006858461) ✅（三个 job 全绿）
 
 ## 设计边界
 
 | 项 | 做法 |
 |---|---|
 | 启动方式 | dylib 的 `__attribute__((constructor))`，自己建 `UIWindow` 挂浮层 |
+| 窗口挂载 | iOS 13+ 先找活跃 `UIWindowScene` 再挂（scene 架构宿主必需） |
 | 对宿主的侵入 | 仅一条 `LC_LOAD_DYLIB` 加载指令；无 hook、无 swizzle、无 fishhook |
 | 卸载 | 从 `.app` 删除 dylib + 去掉加载指令即完全消失 |
-| 登录 | 网易云二维码登录（扫码，无需账号密码） |
+| 登录 | 网易云二维码登录（扫码，无需账号密码），`MUSIC_U` 落盘可跨启动恢复 |
 | 音频 | `AVPlayer` + `AVAudioSession(Playback)`，支持锁屏封面与远程控制 |
 
-> 免越狱的安装方式：把 `Player.dylib` 注入宿主 IPA 后重签，再用
-> Sideloadly / TrollStore 等工具安装。
+## 功能
+
+- **悬浮球**：可拖动、松手吸边；点击展开面板。面板可拖动、iPad 右下角可缩放。
+- **登录**：二维码扫码（801 等待 / 802 已扫 / 803 成功 / 800 过期 / 8821 风控兜底），
+  成功后向服务端确认登录态，不靠本地 Cookie 猜测；界面内直接显示诊断信息。
+- **发现**：快捷入口（每日推荐 / 私人漫游 / 心动模式 / 私人雷达 / 排行榜）、
+  推荐歌单、最近热门新歌。
+- **我的**：我喜欢的音乐 + 我创建/收藏的歌单。
+- **播放**：队列、上一首/下一首、进度拖动、后台播放、锁屏/耳机控制、
+  中断与拔耳机处理。
+- **歌词**：同时解析 `lrc` / `tlyric` / `yrc`；整行高亮 + 逐字点亮 + 翻译 +
+  点击跳转；用 `CADisplayLink` 做 60fps 时间插值，不整表重排。
+- **搜索**：顶部搜索框，走 `/api/cloudsearch/pc`（能拿到 `al.picUrl` 封面）。
 
 ## 目录
 
 ```
 src/
-  NEEntry.m            构造器入口：等宿主就绪 → 装浮层
+  NEEntry.m            构造器入口：等宿主 scene 就绪 → 挂窗口 → 装浮层
   Core/
-    NESession.{h,m}    HTTP 会话、Cookie 持久化（MUSIC_U）
-    NEApi.{h,m}        网易云接口：扫码/搜索/歌单/播放地址/歌词
-    NEPlayer.{h,m}     AVPlayer 队列、后台播放、锁屏控制
+    NESession.{h,m}    HTTP 会话、Cookie 持久化（MUSIC_U / __csrf）
+    NEApi.{h,m}        网易云接口：扫码/账号/搜索/歌单/榜单/播放地址/歌词
+    NEPlayer.{h,m}     AVPlayer 队列、后台播放、锁屏控制、中断处理
+    NELyric.{h,m}      lrc / tlyric / yrc 解析与二分查找
+    NEImageCache.{h,m} 封面缓存（内存 + 磁盘 + 并发去重）
   UI/                  可整体替换的表现层
     NEUITheme.h        所有颜色/尺寸常量集中在此
     NEFloatingBall.{h,m}  悬浮球与面板容器（唯一窗口相关代码）
-    NEMainPanel.{h,m}     登录/发现/搜索/播放页
-scripts/inject.py      把 dylib 注入宿主 IPA（LIEF）
-.github/workflows/     macOS CI：真 Xcode SDK 编译 + ad-hoc 签名
+    NEMainPanel.{h,m}     导航/搜索/列表/播放条/登录入口
+    NEDiscoverPage.{h,m}  发现页
+    NEProfilePage.{h,m}   我的页
+    NEPlayerPage.{h,m}    播放页（封面 + 歌词 + 控制）
+    NELyricView.{h,m}     歌词滚动与逐字点亮
+    NESidebar.{h,m}       左侧竖排导航
+    NELoginView.{h,m}     扫码登录
+    NEQRCode.{h,m}        内置 QR 生成（字节模式，版本 1-10，纠错 M）
+shell-app/              测试用空壳宿主（scene 架构，模拟真实宿主条件）
+scripts/
+  inject.py             把 dylib 注入任意宿主 IPA（LIEF）+ 重签 + 重打包
+  inject_app.py         把 dylib 注入已解包的 .app（CI 分步用）
+  ent.plist             空壳重签用的 entitlements
+.github/workflows/      macOS CI：真 Xcode SDK 编译 + 注入 + 签名 + 打包
 ```
 
 UI 层与 Core 之间只通过 `NEApi` / `NEPlayer` 的公开接口通信，**换界面只需替换
@@ -43,17 +71,17 @@ UI 层与 Core 之间只通过 `NEApi` / `NEPlayer` 的公开接口通信，**�
 推荐走 CI（macOS runner 自带真 iOS SDK，产物同时含 arm64 与 arm64e）：
 
 ```
-Actions → build → 下载 Player.dylib
+Actions → build → 下载 Player.dylib / NEMusicShell.ipa
 ```
 
-本地/Theos：
+本地 / Theos：
 
 ```bash
 export THEOS=~/theos
 make
 ```
 
-## 注入
+## 注入真实宿主
 
 ```bash
 pip install lief
@@ -61,20 +89,34 @@ python3 scripts/inject.py --ipa 宿主.ipa --dylib Player.dylib --out dist
 ```
 
 脚本会：解包 → 加 `LC_LOAD_DYLIB` → 拷入 dylib → 校验 → ad-hoc 重签 → 重打包。
+注意 `--ipa` 必须是**已脱壳**的 IPA（App Store 原包是 FairPlay 加密的，注入后跑不起来）。
 
-## 已验证
+## CI 实测项
 
-- 网易云接口（明文，无需 weapi 加密）：扫码 unikey / 轮询 801→803 / 搜索 /
-  歌单详情 / 播放地址 v1 / 歌词，均已实测返回正常
-- 注入脚本：对真实 arm64 IPA 实测，依赖数 33 → 34，`verify` 通过，
-  产物中 dylib 与加载指令均存在
+每次 push 到 `main` 会依次验证：
+
+1. `clang -arch arm64 / arm64e` 两轮编译，`lipo` 合成 fat 二进制；
+2. `codesign --force --sign -` ad-hoc 签名，`lief` 读回 `LC_CODE_SIGNATURE`；
+3. 空壳 App 编译，注入后 `otool -L` 必须出现 `@executable_path/Player.dylib`，
+   `Player.dylib` 必须真的在 `.app` 里（不通过就红）；
+4. 打包 IPA，产物 `NEMusicShell.ipa` 可下载。
+
+最近一次产物：`Player.dylib` 1.1 MB（arm64 + arm64e），`NEMusicShell.ipa` 364 KB。
+本机可复核：
+
+```bash
+python3 -c "import lief; b=lief.MachO.parse('Player.dylib'); print(b.size, [str(b.at(i).header.cpu_type) for i in range(b.size)])"
+```
 
 ## 已知限制
 
-- 未登录时部分歌曲 `url` 为 `null`（版权/会员限制），会提示登录
-- VIP 专享曲目即使登录也可能只返回试听片段
-- 播放地址带时效签名（约 20 分钟），长时间暂停后恢复需重新解析
-- 需要在 macOS 上完成签名，Windows/Linux 只能改二进制不能签名
+- 未登录时部分歌曲 `url` 为 `null`（版权/会员限制），界面会提示登录。
+- VIP 专享曲目即使登录也可能只返回试听片段。
+- 播放地址带时效签名（约 20 分钟），长时间暂停后恢复需重新解析。
+- 签名必须在 macOS 上完成；Windows/Linux 只能改二进制不能签名。
+- UI 逻辑（布局、手势、歌词滚动）需要真机确认；CI 只能保证编译、注入与打包。
+- 注入真实 App Store 版网易云需要其已脱壳版本，且重签后需自备证书或用
+  TrollStore / Sideloadly 安装。
 
 ## 合规
 

@@ -8,6 +8,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)shared;
 
+/// iOS 13+ 必须把窗口挂到活跃的 UIWindowScene，否则浮层不会显示
+- (void)attachToScene:(UIWindowScene *)scene;
+
 - (void)presentBall;
 /// 面板内容由外部提供，便于整体替换 UI
 - (void)installPanelView:(UIView *)panelView;

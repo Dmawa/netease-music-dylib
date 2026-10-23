@@ -36,6 +36,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, copy) NSString *currentPlaylistTitle;
 
 @property (nonatomic, strong) NSArray<NESong *> *songs;
+/// 列表模式：搜索结果 / 歌单曲目用 table 展示；否则「发现」页展示推荐内容
+@property (nonatomic, assign) BOOL browsingList;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
 @property (nonatomic, strong, nullable) NELoginView *loginView;
@@ -84,15 +86,10 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)loadDiscover {
-    if (self.loading) return;
-    self.loading = YES;
+    // 推荐内容由 NEDiscoverPage 自己拉取，这里只负责把视图切回发现页。
+    // （以前这里往 table 塞热歌榜，导致发现页永远被列表挡住。）
+    self.browsingList = NO;
     [self reload];
-    [[NEApi shared] fetchToplist:^(NSArray<NESong *> *songs, NSError *error) {
-        self.loading = NO;
-        if (error) { self.hint = error.localizedDescription; [self reload]; return; }
-        self.songs = songs;
-        [self reload];
-    }];
 }
 
 #pragma mark - 头部
@@ -149,6 +146,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
     self.tab = (NEPanelTab)index;
+    if (self.tab == NEPanelTabDiscover) self.browsingList = NO;
     [self highlightTab];
     [self reload];
 }
@@ -213,21 +211,17 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     BOOL isDiscover = (self.tab == NEPanelTabDiscover);
 
     // 搜索结果 / 歌单曲目 用 table 展示时，必须把发现页藏起来，
-    // 否则两个视图会重叠（之前就是这个 bug）
-    BOOL showTable = (isDiscover && self.songs.count > 0);
+    // 否则两个视图会重叠；没进列表模式时发现页必须可见。
+    BOOL showTable = (isDiscover && self.browsingList);
 
     self.playerPage.hidden   = !isPlayer;
     self.profilePage.hidden  = !isProfile;
     self.discoverPage.hidden = (!isDiscover || showTable);
     self.table.hidden        = !showTable;
 
-    if (isDiscover) {
-        if (showTable) {
-            // 展示歌单曲目
-        } else {
-            [self.discoverPage reloadData];
-            return;
-        }
+    if (isDiscover && !showTable) {
+        [self.discoverPage reloadData];
+        return;
     }
 
     if (isPlayer) {
@@ -299,6 +293,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)discoverPage:(id)page didOpenPlaylistID:(NSString *)playlistID title:(NSString *)title {
     if (!playlistID.length) return;
     self.currentPlaylistTitle = title;
+    self.browsingList = YES;
     self.loading = YES;
     [self reload];
 
@@ -329,6 +324,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.currentPlaylistTitle = playlist.name;
     // 切回列表视图展示该歌单曲目
     self.tab = NEPanelTabDiscover;
+    self.browsingList = YES;
     [self highlightTab];
     self.loading = YES;
     [self reload];
@@ -362,6 +358,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         self.currentPlaylistTitle = nil;
         self.hint = @"";
         self.tab = NEPanelTabDiscover;
+        self.browsingList = NO;
         [self highlightTab];
         [self reload];
         return;
@@ -369,6 +366,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
     // search merged into the top search bar
     self.tab = NEPanelTabDiscover;
+    self.browsingList = YES;
     [self highlightTab];
     self.currentPlaylistTitle = [NSString stringWithFormat:@"搜索：%@", kw];
     self.songs = @[];

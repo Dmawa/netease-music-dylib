@@ -38,7 +38,12 @@ def safe_extract(ipa: Path, work: Path) -> None:
     with zipfile.ZipFile(ipa) as zf:
         for info in zf.infolist():
             target = (work / info.filename).resolve()
-            if not str(target).startswith(str(root)):
+            # 不能只用 startswith：work-evil/ 这种同前缀目录能绕过
+            try:
+                inside = os.path.commonpath([str(root), str(target)]) == str(root)
+            except ValueError:      # Windows 上跨盘符
+                inside = False
+            if not inside:
                 raise SystemExit(f"非法条目（路径逃逸）: {info.filename}")
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)

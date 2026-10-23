@@ -195,7 +195,8 @@ static NSDictionary *NEParseYRCLine(NSString *line) {
         // yrc 缺翻译时，用 lrc 的文本去补
         if (!trans.count) {
             NSArray<NSArray *> *lrcPairs = NEParseLRC(lrc);
-            NSMutableDictionary<NSNumber *, NSString *> *byText = [NSMutableDictionary dictionary];
+            // 键是歌词文本，值是时间戳（反过来写会触发 clang 的指针类型告警）
+            NSMutableDictionary<NSString *, NSNumber *> *byText = [NSMutableDictionary dictionary];
             for (NSArray *p in lrcPairs) byText[p[1]] = p[0];
             for (NELyricLine *line in lines) {
                 NSNumber *t = byText[line.text];

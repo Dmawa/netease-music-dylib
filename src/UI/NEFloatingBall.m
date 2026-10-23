@@ -296,7 +296,44 @@
     });
 }
 
+#pragma mark - 场景挂载（iOS 13+）
+
+/// 找到当前活跃的窗口场景；iOS 12 及以下返回 nil
+- (UIWindowScene *)activeWindowScene {
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]] &&
+                s.activationState != UISceneActivationStateUnattached) {
+                return (UIWindowScene *)s;
+            }
+        }
+    }
+    return nil;
+}
+
+/// 关键：iOS 13 起，window 没有 windowScene 就不会显示。
+/// 宿主的 App 基本都是 scene 架构，必须在 presentBall 之前挂上。
+- (void)attachToScene:(UIWindowScene *)scene {
+    if (!scene) return;
+    if (@available(iOS 13.0, *)) {
+        if (self.windowScene == scene) {
+            self.hidden = NO;
+            return;
+        }
+        self.windowScene = scene;
+        self.frame = scene.coordinateSpace.bounds;
+        // 真机排查用：Console.app 里过滤 [NEMusic] 就能看到窗口挂载情况
+        NSLog(@"[NEMusic] 浮层窗口已挂到场景 %.0fx%.0f",
+              self.frame.size.width, self.frame.size.height);
+    }
+    self.hidden = NO;
+    [self setNeedsLayout];
+}
+
 - (void)presentBall {
+    if (@available(iOS 13.0, *)) {
+        if (!self.windowScene) [self attachToScene:[self activeWindowScene]];
+    }
     self.hidden = NO;
     if (self.hasPositioned) return;
     self.hasPositioned = YES;

@@ -33,17 +33,35 @@
 @end
 
 @interface ShellAppDelegate : UIResponder <UIApplicationDelegate>
-@property (nonatomic, strong) UIWindow *window;
 @end
 
 @implementation ShellAppDelegate
 - (BOOL)application:(UIApplication *)app
 didFinishLaunchingWithOptions:(NSDictionary *)opts {
-    self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    self.window.rootViewController = [ShellViewController new];
-    [self.window makeKeyAndVisible];
+    // 窗口交给 scene delegate 创建：真实宿主（网易云）就是 scene 架构，
+    // 空壳也必须一样，否则测不出「window 没挂 scene 就不显示」这类问题。
     return YES;
 }
+@end
+
+#pragma mark - 场景代理
+
+@interface ShellSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property (nonatomic, strong) UIWindow *window;
+@end
+
+@implementation ShellSceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+    options:(UISceneConnectionOptions *)connectionOptions {
+    if (![scene isKindOfClass:[UIWindowScene class]]) return;
+    UIWindow *window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+    window.rootViewController = [ShellViewController new];
+    self.window = window;
+    [window makeKeyAndVisible];
+}
+
 @end
 
 int main(int argc, char *argv[]) {

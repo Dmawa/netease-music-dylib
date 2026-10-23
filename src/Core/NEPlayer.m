@@ -62,7 +62,12 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
         [self notifyState];
     } else if (type.integerValue == AVAudioSessionInterruptionTypeEnded) {
         NSNumber *opt = note.userInfo[AVAudioSessionInterruptionOptionKey];
-        if (opt.integerValue & AVAudioSessionInterruptionOptionShouldResume) [self.player play];
+        if (opt.integerValue & AVAudioSessionInterruptionOptionShouldResume) {
+            [self.player play];
+            self.isPlaying = YES;
+            [self notifyState];
+            [self updateNowPlaying];
+        }
     }
 }
 
@@ -192,10 +197,13 @@ NSString *const NEPlayerProgressNotification = @"NEPlayerProgressNotification";
         self.currentIndex++;
         [self loadCurrentAndPlay];
     } else {
+        // 队列播完：停在最后一首。把 index 归零会让 currentSong 与播放器状态对不上，
+        // 面板会显示第一首却没有任何声音。
         [self.player pause];
         self.isPlaying = NO;
-        self.currentIndex = 0;
+        self.currentTime = self.duration;
         [self notifyState];
+        [self updateNowPlaying];
     }
 }
 
