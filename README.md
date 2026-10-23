@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40018190401](https://github.com/Dmawa/netease-music-dylib/actions/runs/40018190401) ✅（三个 job 全绿）
-- 最新版本：v0.5.4（网页登录改为读 WKHTTPCookieStore，登录后自动接管）
+- 最近一次 CI：run [40020444181](https://github.com/Dmawa/netease-music-dylib/actions/runs/40020444181) ✅（三个 job 全绿）
+- 最新版本：v0.6.0（登录按钮自动隐藏 / 设置页 / 播放进度记忆）
 
 ## 设计边界
 
@@ -37,7 +37,9 @@
   仍是占位）、推荐歌单、最近热门新歌。
 - **我的**：我喜欢的音乐 + 我创建/收藏的歌单。
 - **播放**：队列、上一首/下一首、进度拖动、后台播放、锁屏/耳机控制、
-  中断与拔耳机处理。
+  中断与拔耳机处理；退出前把队列与进度写盘，下次启动恢复上次歌曲（点播放重新取流并 seek）。
+- **设置页**：「我的」页顶部账号栏（头像/昵称/VIP）+ 右上角齿轮进入设置：
+  账号信息、VIP 等级、我的消息、关于（版本 + 作者）、退出登录；登录后顶栏登录按钮自动隐藏。
 - **歌词**：同时解析 `lrc` / `tlyric` / `yrc`；整行高亮 + 逐字点亮 + 翻译 +
   点击跳转；用 `CADisplayLink` 做 60fps 时间插值，不整表重排。
 - **搜索**：顶部搜索框，走 `/api/cloudsearch/pc`（能拿到 `al.picUrl` 封面）。
@@ -65,6 +67,8 @@ src/
     NESidebar.{h,m}       左侧竖排导航
     NELoginView.{h,m}     扫码登录 + 兜底入口（网页登录/粘贴 Cookie）
     NEWebLogin.{h,m}      应用内官方网页登录（WKWebView，检测 MUSIC_U）
+    NESettingsPage.{h,m}  设置页：账号/VIP/消息/关于/退出登录
+    NEAppInfo.h           插件版本与作者常量（关于页用）
     NEQRCode.{h,m}        内置 QR 生成（字节模式，版本 1-10，纠错 M）
 shell-app/              测试用空壳宿主（scene 架构，模拟真实宿主条件）
 scripts/
