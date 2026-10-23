@@ -271,7 +271,7 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     NSString *text = [NSString stringWithFormat:@"%@ v%@（作者 %@）",
                       NE_APP_NAME, NE_APP_VERSION, NE_APP_AUTHOR];
     UIActivityViewController *vc = [[UIActivityViewController alloc]
-        activityItems:@[text] applicationActivities:nil];
+        initWithActivityItems:@[text] applicationActivities:nil];
     UIViewController *host = [self topMostController];
     if (!host) return;
     vc.popoverPresentationController.sourceView = self;
