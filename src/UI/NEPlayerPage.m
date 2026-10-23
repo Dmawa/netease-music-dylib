@@ -9,6 +9,7 @@
 @interface NEPlayerPage () <NELyricViewDelegate>
 @property (nonatomic, strong) UIImageView *coverBlurBackdrop;
 @property (nonatomic, strong) UIVisualEffectView *coverBlur;
+@property (nonatomic, strong) UIView *dimView;
 
 @property (nonatomic, strong) UIView *vinylBox;
 @property (nonatomic, strong) UIView *discBase;
@@ -83,9 +84,15 @@
     [self addSubview:_coverBlurBackdrop];
 
     _coverBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    _coverBlur.alpha = 0.75;
+    _coverBlur.alpha = 0.55;
     _coverBlur.userInteractionEnabled = NO;
     [self addSubview:_coverBlur];
+
+    // 压暗背景，避免大图上的文字抢视觉
+    _dimView = [[UIView alloc] initWithFrame:CGRectZero];
+    _dimView.backgroundColor = NEColor(0x000000, 0.38);
+    _dimView.userInteractionEnabled = NO;
+    [self addSubview:_dimView];
 
     // 黑胶唱片
     _vinylBox = [[UIView alloc] initWithFrame:CGRectZero];
@@ -217,19 +224,30 @@
     CGFloat H = self.bounds.size.height;
     _coverBlurBackdrop.frame = self.bounds;
     _coverBlur.frame = self.bounds;
+    _dimView.frame = self.bounds;
 
-    BOOL wide = (W >= 560);
-    CGFloat bottom = 92;
+    BOOL wide = (W >= 620);
+    CGFloat margin = wide ? 32.0 : 16.0;
+    CGFloat bottomBarH = 36.0;
+    CGFloat bottomY = H - bottomBarH;
+
+    // 底部工具排
+    _fxBtn.frame       = CGRectMake(margin, bottomY, 26, 22);
+    _downloadBtn.frame = CGRectMake(margin + 42, bottomY, 26, 22);
+    _moreBtn.frame     = CGRectMake(margin + 84, bottomY, 26, 22);
+    _translateBtn.frame = CGRectMake(W - margin - 28, bottomY - 1, 28, 20);
 
     if (wide) {
-        CGFloat leftW = W * 0.46;
-        CGFloat discSize = MIN(leftW - 52, H - bottom - 150);
-        discSize = MAX(96, discSize);
+        CGFloat leftW = MIN(MAX(W * 0.44, 320), 470);
+        CGFloat availH = H - margin * 2 - bottomBarH;
+        CGFloat discSize = MIN(leftW - 72, availH * 0.46);
+        discSize = MIN(MAX(discSize, 120), 340);
 
-        CGFloat vx = 26 + (leftW - 52 - discSize) / 2;
-        CGFloat vy = 10;
-        _vinylBox.frame = CGRectMake(vx - 10, vy, discSize + 20, discSize + 20);
+        CGFloat groupH = discSize + 20 + 22 + 22 + 50 + 18 + 56;
+        CGFloat topY = MAX(margin, (H - bottomBarH - groupH) / 2);
 
+        CGFloat discX = margin + (leftW - discSize - 20) / 2;
+        _vinylBox.frame = CGRectMake(discX, topY, discSize + 20, discSize + 20);
         _discBase.frame = CGRectMake(10, 10, discSize, discSize);
         _discBase.layer.cornerRadius = discSize / 2;
         _discCover.frame = CGRectMake(10 + discSize * 0.18, 10 + discSize * 0.18,
@@ -239,40 +257,42 @@
         _tonearm.frame = CGRectMake(10 + discSize * 0.72, 0, 4, discSize * 0.45);
         _tonearm.transform = CGAffineTransformMakeRotation(M_PI / 9);
 
-        CGFloat infoY = CGRectGetMaxY(_vinylBox.frame) + 6;
-        _titleLabel.frame = CGRectMake(26, infoY, leftW - 120, 22);
-        _artistLabel.frame = CGRectMake(26, infoY + 22, leftW - 120, 16);
-        _vipBadge.frame = CGRectMake(CGRectGetMaxX(_titleLabel.frame) + 4, infoY + 5, 26, 13);
-        _likeBtn.frame = CGRectMake(leftW - 56, infoY - 2, 28, 28);
-        _commentBtn.frame = CGRectMake(leftW - 26, infoY, 26, 26);
+        CGFloat infoY = topY + discSize + 24;
+        _titleLabel.textAlignment = NSTextAlignmentLeft;
+        _titleLabel.frame = CGRectMake(margin, infoY, leftW - 130, 22);
+        _artistLabel.textAlignment = NSTextAlignmentLeft;
+        _artistLabel.frame = CGRectMake(margin, infoY + 23, leftW - 130, 16);
+        _vipBadge.frame = CGRectMake(MIN(CGRectGetMaxX(_titleLabel.frame) + 4, margin + leftW - 164),
+                                     infoY + 5, 26, 13);
+        _likeBtn.frame = CGRectMake(margin + leftW - 96, infoY - 2, 62, 26);
+        _commentBtn.frame = CGRectMake(margin + leftW - 30, infoY + 1, 26, 24);
 
-        CGFloat barY = infoY + 44;
-        _progress.frame = CGRectMake(26, barY, leftW - 52, 18);
-        _timeNow.frame = CGRectMake(26, barY + 18, 40, 12);
-        _timeTotal.frame = CGRectMake(leftW - 66, barY + 18, 40, 12);
-        _qualityLabel.frame = CGRectMake(leftW / 2 - 40, barY - 2, 80, 12);
+        CGFloat barY = infoY + 50;
+        _progress.frame = CGRectMake(margin, barY, leftW - 28, 18);
+        _timeNow.frame = CGRectMake(margin, barY + 20, 40, 12);
+        _timeTotal.frame = CGRectMake(margin + leftW - 28 - 40, barY + 20, 40, 12);
+        _qualityLabel.frame = CGRectMake(margin + (leftW - 28) / 2 - 40, barY - 2, 80, 12);
 
-        CGFloat cy = barY + 50;
-        CGFloat cx = 26 + (leftW - 52) / 2;
-        _loopBtn.frame = CGRectMake(26, cy - 12, 30, 24);
-        _prevBtn.frame = CGRectMake(cx - 70, cy - 15, 34, 30);
+        CGFloat cy = barY + 58;
+        CGFloat cx = margin + (leftW - 28) / 2;
+        _loopBtn.frame = CGRectMake(margin, cy - 12, 30, 24);
+        _prevBtn.frame = CGRectMake(cx - 72, cy - 15, 34, 30);
         _playBtn.frame = CGRectMake(cx - 17, cy - 20, 34, 40);
-        _nextBtn.frame = CGRectMake(cx + 36, cy - 15, 34, 30);
-        _listBtn.frame = CGRectMake(leftW - 56, cy - 12, 30, 24);
+        _nextBtn.frame = CGRectMake(cx + 38, cy - 15, 34, 30);
+        _listBtn.frame = CGRectMake(margin + leftW - 30, cy - 12, 30, 24);
 
-        _fxBtn.frame = CGRectMake(26, H - 30, 26, 22);
-        _downloadBtn.frame = CGRectMake(70, H - 30, 26, 22);
-        _moreBtn.frame = CGRectMake(114, H - 30, 26, 22);
-        _translateBtn.frame = CGRectMake(W - 52, H - 32, 28, 20);
-
-        CGFloat lyricX = leftW + 14;
-        _lyricView.frame = CGRectMake(lyricX, 8, W - lyricX - 16, H - 16);
+        CGFloat lyricX = margin + leftW + 20;
+        CGFloat lyricW = W - lyricX - margin;
+        _lyricView.hidden = NO;
+        _lyricView.frame = CGRectMake(lyricX, margin, MAX(120, lyricW), H - margin * 2 - bottomBarH);
     } else {
-        CGFloat discSize = MIN(W * 0.42, H * 0.30);
-        discSize = MAX(72, discSize);
-        CGFloat vx = (W - discSize) / 2;
-        _vinylBox.frame = CGRectMake(vx - 10, 4, discSize + 20, discSize + 20);
+        CGFloat discSize = MIN(W * 0.52, H * 0.30);
+        discSize = MIN(MAX(discSize, 96), 220);
+        CGFloat groupH = discSize + 20 + 20 + 16 + 12 + 44 + 16 + 48;
+        CGFloat topY = MAX(8, (H - bottomBarH - groupH) / 2 - 8);
+        CGFloat cx2 = W / 2;
 
+        _vinylBox.frame = CGRectMake(cx2 - discSize / 2 - 10, topY, discSize + 20, discSize + 20);
         _discBase.frame = CGRectMake(10, 10, discSize, discSize);
         _discBase.layer.cornerRadius = discSize / 2;
         _discCover.frame = CGRectMake(10 + discSize * 0.18, 10 + discSize * 0.18,
@@ -282,35 +302,36 @@
         _tonearm.frame = CGRectMake(10 + discSize * 0.72, 0, 3, discSize * 0.42);
         _tonearm.transform = CGAffineTransformMakeRotation(M_PI / 9);
 
-        CGFloat infoY = CGRectGetMaxY(_vinylBox.frame) + 2;
-        _titleLabel.textAlignment = NSTextAlignmentLeft;
-        _titleLabel.frame = CGRectMake(16, infoY, W - 100, 20);
-        _artistLabel.frame = CGRectMake(16, infoY + 20, W - 100, 14);
-        _vipBadge.frame = CGRectMake(W - 78, infoY + 4, 26, 13);
-        _likeBtn.frame = CGRectMake(W - 50, infoY - 2, 26, 26);
-        _commentBtn.frame = CGRectMake(W - 24, infoY + 1, 22, 22);
+        CGFloat infoY = topY + discSize + 18;
+        _titleLabel.textAlignment = NSTextAlignmentCenter;
+        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2 - 70, 20);
+        _artistLabel.textAlignment = NSTextAlignmentCenter;
+        _artistLabel.frame = CGRectMake(margin, infoY + 21, W - margin * 2 - 70, 14);
+        _vipBadge.frame = CGRectMake(W - margin - 30, infoY + 4, 26, 13);
+        _likeBtn.frame = CGRectMake(W - margin - 96, infoY - 2, 62, 24);
+        _commentBtn.frame = CGRectMake(W - margin - 30, infoY + 1, 24, 22);
 
-        CGFloat barY = infoY + 40;
-        _progress.frame = CGRectMake(16, barY, W - 32, 16);
-        _timeNow.frame = CGRectMake(16, barY + 16, 40, 11);
-        _timeTotal.frame = CGRectMake(W - 56, barY + 16, 40, 11);
-        _qualityLabel.frame = CGRectMake(W / 2 - 40, barY, 80, 11);
+        CGFloat barY = infoY + 44;
+        _progress.frame = CGRectMake(margin, barY, W - margin * 2, 16);
+        _timeNow.frame = CGRectMake(margin, barY + 16, 40, 11);
+        _timeTotal.frame = CGRectMake(W - margin - 40, barY + 16, 40, 11);
+        _qualityLabel.frame = CGRectMake(cx2 - 40, barY, 80, 11);
 
-        CGFloat cy = barY + 44;
-        CGFloat cx = W / 2;
-        _loopBtn.frame = CGRectMake(16, cy - 12, 28, 24);
-        _prevBtn.frame = CGRectMake(cx - 70, cy - 14, 32, 28);
-        _playBtn.frame = CGRectMake(cx - 16, cy - 19, 32, 38);
-        _nextBtn.frame = CGRectMake(cx + 38, cy - 14, 32, 28);
-        _listBtn.frame = CGRectMake(W - 44, cy - 12, 28, 24);
+        CGFloat cy = barY + 50;
+        _loopBtn.frame = CGRectMake(margin, cy - 12, 28, 24);
+        _prevBtn.frame = CGRectMake(cx2 - 68, cy - 14, 32, 28);
+        _playBtn.frame = CGRectMake(cx2 - 16, cy - 19, 32, 38);
+        _nextBtn.frame = CGRectMake(cx2 + 36, cy - 14, 32, 28);
+        _listBtn.frame = CGRectMake(W - margin - 28, cy - 12, 28, 24);
 
-        _fxBtn.frame = CGRectMake(16, H - 26, 24, 20);
-        _downloadBtn.frame = CGRectMake(54, H - 26, 24, 20);
-        _moreBtn.frame = CGRectMake(92, H - 26, 24, 20);
-        _translateBtn.frame = CGRectMake(W - 44, H - 28, 26, 19);
-
-        CGFloat lyricTop = cy + 22;
-        _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(40, H - lyricTop - 32));
+        CGFloat lyricTop = cy + 26;
+        CGFloat lyricH = H - lyricTop - bottomBarH - 6;
+        _lyricView.hidden = (lyricH < 36);
+        if (!_lyricView.hidden) {
+            _lyricView.frame = CGRectMake(0, lyricTop, W, lyricH);
+        } else {
+            _lyricView.frame = CGRectMake(0, lyricTop, W, 0);
+        }
     }
 }
 
