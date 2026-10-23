@@ -204,6 +204,11 @@
     [self rebuild];
 }
 
+/// 头文件对外暴露的 reload：等价于按当前 lyric 重建
+- (void)reload {
+    [self rebuild];
+}
+
 - (void)setShowsTranslation:(BOOL)showsTranslation {
     _showsTranslation = showsTranslation;
     for (NELyricLineView *v in self.lineViews) v.showsTranslation = showsTranslation;
@@ -354,8 +359,12 @@
 - (void)startDisplayLink {
     if (self.displayLink) return;
     self.displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick)];
-    self.displayLink.preferredFrameRateRange =
-        CAFrameRateRangeMake(30, 60, 60);      // 支持 ProMotion，省电时自动降
+    if (@available(iOS 15.0, *)) {
+        // 支持 ProMotion（120Hz 设备取 60），省电模式自动降帧
+        self.displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 60, 60);
+    } else {
+        self.displayLink.preferredFramesPerSecond = 60;
+    }
     [self.displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 

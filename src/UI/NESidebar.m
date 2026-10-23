@@ -2,6 +2,9 @@
 #import "NEUITheme.h"
 
 /// 单个导航项：上图标下文字，选中时图标/文字高亮 + 左侧指示条
+@implementation NESidebarItem
+@end
+
 @interface NESidebarCell : UIControl
 @property (nonatomic, strong) UIImageView *icon;
 @property (nonatomic, strong) UILabel *label;
