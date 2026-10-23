@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface NELoginView : UIView
 @property (nonatomic, weak, nullable) id<NELoginViewDelegate> delegate;
+/// 呈现 Cookie 登录弹窗用（由外部传入承载本视图的控制器）
+@property (nonatomic, weak, nullable) UIViewController *hostController;
 /// 开始拉取二维码并轮询
 - (void)start;
 /// 停止轮询（界面关闭时调用，避免后台请求）

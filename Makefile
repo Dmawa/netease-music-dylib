@@ -25,6 +25,7 @@ Player_FILES = src/NEEntry.m \
                src/UI/NEDiscoverPage.m \
                src/UI/NESidebar.m \
                src/UI/NELoginView.m \
+               src/UI/NEWebLogin.m \
                src/UI/NELyricView.m \
                src/UI/NEQRCode.m
 
@@ -32,7 +33,7 @@ Player_CFLAGS = -fobjc-arc -fblocks \
                 -I src -I src/Core -I src/UI -I src/Support \
                 -Wall -Wno-unused-parameter
 
-Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics CoreMedia Security
+Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics CoreMedia Security WebKit
 Player_LIBRARIES  = sqlite3
 
 include $(THEOS)/makefiles/common.mk

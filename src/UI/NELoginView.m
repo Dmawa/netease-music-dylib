@@ -2,6 +2,7 @@
 #import "NEUITheme.h"
 #import "NEApi.h"
 #import "NEQRCode.h"
+#import "NEWebLogin.h"
 
 typedef NS_ENUM(NSInteger, NELoginState) {
     NELoginStateLoading,     // 正在取二维码
@@ -22,6 +23,7 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UIButton *refreshBtn;
 @property (nonatomic, strong) UIButton *cancelBtn;
+@property (nonatomic, strong) UIButton *cookieBtn;
 
 @property (nonatomic, copy, nullable) NSString *unikey;
 @property (nonatomic, assign) NELoginState state;
@@ -31,6 +33,17 @@ typedef NS_ENUM(NSInteger, NELoginState) {
 
 - (void)confirmLoginWithNickname:(nullable NSString *)nickname attempt:(NSInteger)attempt;
 @end
+
+/// 从完整 Cookie 串里取某个值（允许粘贴整段 "a=1; b=2; ..."）
+static NSString *NECookieValue(NSString *raw, NSString *name) {
+    NSString *pattern = [NSString stringWithFormat:@"(?:^|[;,\\s])%@=([^;,\\s]+)", name];
+    NSRegularExpression *re = [NSRegularExpression regularExpressionWithPattern:pattern
+                                                                        options:0 error:nil];
+    NSTextCheckingResult *m = [re firstMatchInString:raw options:0
+                                               range:NSMakeRange(0, raw.length)];
+    if (!m || m.numberOfRanges < 2) return nil;
+    return [raw substringWithRange:[m rangeAtIndex:1]];
+}
 
 @implementation NELoginView
 
@@ -108,6 +121,14 @@ typedef NS_ENUM(NSInteger, NELoginState) {
     _refreshBtn.hidden = YES;
     [self addSubview:_refreshBtn];
 
+    // 兜底登录：扫码被服务端限制时，可以用浏览器登录后的 Cookie 直接登录
+    _cookieBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_cookieBtn setTitle:@"其他登录方式" forState:UIControlStateNormal];
+    _cookieBtn.titleLabel.font = [UIFont systemFontOfSize:12];
+    [_cookieBtn setTitleColor:NE_TEXT_DIM forState:UIControlStateNormal];
+    [_cookieBtn addTarget:self action:@selector(showOtherLoginOptions) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:_cookieBtn];
+
     _cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [_cancelBtn setTitle:@"关闭" forState:UIControlStateNormal];
     _cancelBtn.titleLabel.font = [UIFont systemFontOfSize:14];
@@ -128,7 +149,7 @@ typedef NS_ENUM(NSInteger, NELoginState) {
     _subtitleLabel.frame = CGRectMake(pad, CGRectGetMaxY(_titleLabel.frame) + 4, W - pad * 2, 16);
 
     // 二维码尺寸：受宽高共同约束，最长边留出让状态文字和按钮的空间
-    CGFloat availH = H - 62 - 90;                 // 标题区 + 底部区
+    CGFloat availH = H - 62 - 116;                // 标题区 + 底部区（多一个 Cookie 登录按钮）
     CGFloat side = MIN(W - pad * 2, availH);
     side = MIN(side, 260);
     side = MAX(side, 120);
@@ -142,6 +163,7 @@ typedef NS_ENUM(NSInteger, NELoginState) {
     CGFloat statusY = CGRectGetMaxY(_qrView.frame) + 10;
     _statusLabel.frame = CGRectMake(pad, statusY, W - pad * 2, 34);
     _refreshBtn.frame = CGRectMake(pad, CGRectGetMaxY(_statusLabel.frame) + 2, W - pad * 2, 28);
+    _cookieBtn.frame = CGRectMake(pad, H - 74, W - pad * 2, 28);
     _cancelBtn.frame = CGRectMake(pad, H - 40, W - pad * 2, 30);
 }
 
@@ -402,6 +424,99 @@ typedef NS_ENUM(NSInteger, NELoginState) {
     if ([self.delegate respondsToSelector:@selector(loginViewDidCancel:)]) {
         [self.delegate loginViewDidCancel:self];
     }
+}
+
+#pragma mark - Cookie 登录（扫码被限制时的兜底）
+
+- (void)showOtherLoginOptions {
+    UIViewController *host = self.hostController ?: self.window.rootViewController;
+    if (!host) return;
+
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:@"其他登录方式"
+                         message:@"扫码被服务端限制时，可以用官方网页登录（扫码/手机号都行）"
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"网页登录（推荐）"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self openWebLogin];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"粘贴 Cookie 登录"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self showCookieImport];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    // iPad 上 action sheet 需要锚点
+    sheet.popoverPresentationController.sourceView = self;
+    sheet.popoverPresentationController.sourceRect = self.bounds;
+    [host presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)openWebLogin {
+    UIViewController *host = self.hostController ?: self.window.rootViewController;
+    if (!host) return;
+
+    NEWebLogin *web = [NEWebLogin new];
+    web.modalPresentationStyle = UIModalPresentationFullScreen;
+    __weak typeof(self) weakSelf = self;
+    web.onSuccess = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self applyState:NELoginStateWaiting message:@"网页登录成功，正在确认…"];
+        [self confirmLoginWithNickname:nil attempt:1];
+    };
+    web.onCancel = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self applyState:NELoginStateWaiting message:@"已取消网页登录"];
+    };
+    [host presentViewController:web animated:YES completion:nil];
+}
+
+- (void)showCookieImport {
+    UIViewController *host = self.hostController ?: self.window.rootViewController;
+    if (!host) return;
+
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"用 Cookie 登录"
+                         message:@"在电脑浏览器打开 music.163.com 登录，从开发者工具 "
+                                 @"Network 里复制请求头的 Cookie（含 MUSIC_U=），粘贴到这里。"
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
+        tf.placeholder = @"MUSIC_U=xxxx; __csrf=yyyy";
+        tf.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        tf.autocorrectionType = UITextAutocorrectionTypeNo;
+        tf.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"登录" style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self importCookieString:alert.textFields.firstObject.text ?: @""];
+    }]];
+    [host presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)importCookieString:(NSString *)raw {
+    NSString *musicU = NECookieValue(raw, @"MUSIC_U");
+    if (!musicU.length) {
+        [self applyState:NELoginStateFailed message:@"没找到 MUSIC_U，请粘贴完整的 Cookie"];
+        return;
+    }
+    [[NESession shared] setCookieValue:musicU forName:@"MUSIC_U"];
+    NSString *csrf = NECookieValue(raw, @"__csrf");
+    if (csrf.length) [[NESession shared] setCookieValue:csrf forName:@"__csrf"];
+
+    [self applyState:NELoginStateWaiting message:@"Cookie 已保存，正在验证…"];
+    [self confirmLoginWithNickname:nil attempt:1];
 }
 
 @end

@@ -520,6 +520,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
     NELoginView *login = [[NELoginView alloc] initWithFrame:CGRectZero];
     login.delegate = self;
+    login.hostController = vc;        // Cookie 兜底登录需要它来弹窗
     [vc.view addSubview:login];
     self.loginView = login;
 
