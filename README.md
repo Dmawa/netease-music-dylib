@@ -6,8 +6,8 @@
 
 - 最低系统：iOS 13.0（arm64 / arm64e）
 - 产物：`Player.dylib` + 可选的测试空壳 `NEMusicShell.ipa`
-- 最近一次 CI：run [40016066172](https://github.com/Dmawa/netease-music-dylib/actions/runs/40016066172) ✅（三个 job 全绿）
-- 最新版本：v0.5.3（扫码被限制时可用「网页登录 / 粘贴 Cookie」兜底）
+- 最近一次 CI：run [40018190401](https://github.com/Dmawa/netease-music-dylib/actions/runs/40018190401) ✅（三个 job 全绿）
+- 最新版本：v0.5.4（网页登录改为读 WKHTTPCookieStore，登录后自动接管）
 
 ## 设计边界
 
@@ -30,8 +30,8 @@
   成功后向服务端确认登录态，不靠本地 Cookie 猜测；界面内直接显示诊断信息。
 - **兜底登录**：若服务端限制第三方客户端扫码（8821「请切换其他登录方式或升级新版本再试」），
   登录页底部「其他登录方式」提供：
-  ① 应用内 `WKWebView` 打开官方网页（扫码/手机号/短信都由官方页面处理，
-  登录后 `MUSIC_U` 落到共享 Cookie 存储，插件自动接管）；
+  ① 应用内 `WKWebView` 打开官方网页（扫码/手机号/短信都由官方页面处理），
+  登录后从 `WKHTTPCookieStore` 读取 `MUSIC_U` 并同步给会话（顶栏「已完成」可手动触发检测）；
   ② 直接粘贴浏览器里的 Cookie。
 - **发现**：快捷入口（每日推荐、排行榜已接通；私人漫游 / 心动模式 / 私人雷达
   仍是占位）、推荐歌单、最近热门新歌。
