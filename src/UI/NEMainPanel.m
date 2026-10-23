@@ -3,6 +3,7 @@
 #import "NEApi.h"
 #import "NEPlayer.h"
 #import "NEQRCode.h"
+#import "NEPlayerPage.h"
 
 typedef NS_ENUM(NSInteger, NEPanelTab) {
     NEPanelTabDiscover = 0,
@@ -22,10 +23,9 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, strong) UIButton *playBtn;
 @property (nonatomic, strong) UISlider *progress;
 @property (nonatomic, strong) UILabel *timeLabel;
-@property (nonatomic, strong) UILabel *lyricLabel;
+@property (nonatomic, strong) NEPlayerPage *playerPage;
 
 @property (nonatomic, strong) NSArray<NESong *> *songs;
-@property (nonatomic, strong) NSArray<NSDictionary *> *lyricLines;
 @property (nonatomic, assign) BOOL loading;
 @property (nonatomic, copy) NSString *hint;
 @property (nonatomic, strong, nullable) UIViewController *loginVC;
@@ -40,6 +40,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         self.tab = NEPanelTabDiscover;
         [self buildHeader];
         [self buildTable];
+        [self buildPlayerPage];
         [self buildPlayerBar];
         [self observePlayer];
     }
@@ -164,15 +165,21 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         self.searchBar.frame = CGRectMake(8, top, w - 16, 44);
         top += 44;
     }
-    CGFloat playerH = 84;
-    self.table.frame = CGRectMake(0, top, w, MAX(0, h - top - playerH));
+    CGFloat playerH = 64;
+    CGRect content = CGRectMake(0, top, w, MAX(0, h - top - playerH));
+    self.table.frame = content;
+    self.playerPage.frame = content;
     self.playerBar.frame = CGRectMake(0, h - playerH, w, playerH);
     [self layoutPlayerBar];
 }
 
 - (void)reload {
-    if (self.tab == NEPanelTabPlayer) {
-        [self refreshPlayerPage];
+    BOOL isPlayer = (self.tab == NEPanelTabPlayer);
+    self.playerPage.hidden = !isPlayer;
+    self.table.hidden = isPlayer;
+    self.searchBar.hidden = (self.tab != NEPanelTabSearch) || isPlayer;
+    if (isPlayer) {
+        [self.playerPage refresh];
         return;
     }
     [self setNeedsLayout];
@@ -247,6 +254,14 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     }];
 }
 
+#pragma mark - 播放页
+
+- (void)buildPlayerPage {
+    _playerPage = [[NEPlayerPage alloc] initWithFrame:CGRectZero];
+    _playerPage.hidden = YES;
+    [self addSubview:_playerPage];
+}
+
 #pragma mark - 播放条
 
 - (void)buildPlayerBar {
@@ -280,21 +295,15 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     [_progress addTarget:self action:@selector(seekEnd) forControlEvents:UIControlEventTouchUpInside];
     [_playerBar addSubview:_progress];
 
-    _lyricLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _lyricLabel.font = [UIFont systemFontOfSize:13];
-    _lyricLabel.textColor = NE_TEXT_DIM;
-    _lyricLabel.numberOfLines = 2;
-    _lyricLabel.textAlignment = NSTextAlignmentCenter;
-    [self addSubview:_lyricLabel];
 }
 
 - (void)layoutPlayerBar {
     CGFloat w = self.bounds.size.width;
     _nowTitle.frame = CGRectMake(14, 10, w - 90, 18);
-    _nowSub.frame = CGRectMake(14, 29, w - 90, 14);
-    _playBtn.frame = CGRectMake(w - 58, 16, 44, 44);
-    _progress.frame = CGRectMake(14, 50, w - 28, 20);
-    _lyricLabel.frame = CGRectMake(16, 72, w - 32, 0);
+    _nowSub.frame = CGRectMake(14, 30, w - 90, 14);
+    _playBtn.frame = CGRectMake(w - 56, 12, 44, 44);
+    // 细进度条贴在播放条顶部
+    _progress.frame = CGRectMake(0, 0, w, 2);
 }
 
 - (void)toggle { [[NEPlayer shared] togglePlayPause]; }
@@ -313,11 +322,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)trackChanged:(NSNotification *)note {
     [self refreshPlayerBar];
-    NESong *song = [NEPlayer shared].currentSong;
-    if (!song) return;
-    [[NEApi shared] fetchLyricForSong:song complete:^(NSArray<NSDictionary *> *lines, NSError *error) {
-        self.lyricLines = lines;
-    }];
+    [self.playerPage refresh];
 }
 
 - (void)refreshPlayerBar {
@@ -329,20 +334,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.progress.maximumValue = MAX(1.0, p.duration);
     if (!self.progress.isTracking) self.progress.value = p.currentTime;
 
-    if (self.tab == NEPanelTabPlayer) [self refreshPlayerPage];
 }
 
-- (void)refreshPlayerPage {
-    // 播放页：把当前歌词滚动到可见位置（简版）
-    NEPlayer *p = [NEPlayer shared];
-    if (!self.lyricLines.count || !p.isPlaying) return;
-    double t = p.currentTime;
-    NSString *line = nil;
-    for (NSDictionary *d in self.lyricLines) {
-        if ([d[@"t"] doubleValue] <= t + 0.2) line = d[@"text"]; else break;
-    }
-    self.lyricLabel.text = line ?: @"";
-}
 
 #pragma mark - 登录（二维码）
 

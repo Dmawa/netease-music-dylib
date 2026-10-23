@@ -15,14 +15,18 @@ Player_FILES = src/NEEntry.m \
                src/Core/NESession.m \
                src/Core/NEApi.m \
                src/Core/NEPlayer.m \
+               src/Core/NELyric.m \
                src/UI/NEFloatingBall.m \
-               src/UI/NEMainPanel.m
+               src/UI/NEMainPanel.m \
+               src/UI/NEPlayerPage.m \
+               src/UI/NELyricView.m \
+               src/UI/NEQRCode.m
 
 Player_CFLAGS = -fobjc-arc -fblocks \
                 -I src -I src/Core -I src/UI -I src/Support \
                 -Wall -Wno-unused-parameter
 
-Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics CoreMedia AudioToolbox
+Player_FRAMEWORKS = Foundation UIKit AVFoundation MediaPlayer QuartzCore CoreGraphics CoreMedia AudioToolbox CoreText CoreImage
 Player_LIBRARIES  = sqlite3
 
 include $(THEOS)/makefiles/common.mk

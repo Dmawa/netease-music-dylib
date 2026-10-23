@@ -3,6 +3,7 @@
 //  说明：以下接口均已实测可用，无需 weapi 加密。
 #import <Foundation/Foundation.h>
 #import "NESession.h"
+#import "NELyric.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -30,7 +31,7 @@ typedef void (^NEQRCodeBlock)(NSString * _Nullable unikey, NSError * _Nullable e
 /// 801 等扫码 / 802 已扫待确认 / 803 成功 / 800 过期
 typedef void (^NEPollBlock)(NSInteger code, NSString * _Nullable nickname, NSError * _Nullable error);
 typedef void (^NESongsBlock)(NSArray<NESong *> * _Nullable songs, NSError * _Nullable error);
-typedef void (^NELyricBlock)(NSArray<NSDictionary *> * _Nullable lines, NSError * _Nullable error);
+typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable error);
 
 @interface NEApi : NSObject
 

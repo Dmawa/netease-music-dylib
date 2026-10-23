@@ -37,6 +37,7 @@ jobs:
               -framework Foundation -framework UIKit -framework AVFoundation \
               -framework MediaPlayer -framework QuartzCore -framework CoreGraphics \
               -framework CoreMedia -framework AudioToolbox \
+              -framework CoreText -framework CoreImage \
               -install_name /usr/lib/Player.dylib \
               -o out/Player.$ARCH.dylib $SRCS
           done

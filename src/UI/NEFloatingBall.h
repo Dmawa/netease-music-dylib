@@ -1,5 +1,5 @@
 //  NEFloatingBall.h
-//  悬浮球 + 面板容器。唯一职责：把面板挂到窗口上、处理拖动与展开。
+//  悬浮窗容器：悬浮球 + 可自由拖动的面板
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -8,7 +8,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)shared;
 
-/// 显示悬浮球（幂等）
 - (void)presentBall;
 /// 面板内容由外部提供，便于整体替换 UI
 - (void)installPanelView:(UIView *)panelView;

@@ -202,28 +202,21 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 - (void)fetchLyricForSong:(NESong *)song complete:(NELyricBlock)complete {
-    NSString *path = [NSString stringWithFormat:@"/api/song/lyric?id=%@&lv=-1&tv=-1", song.songID];
+    // 一次请求拿三种格式：lrc（整行）、tlyric（翻译）、yrc（逐字）
+    NSString *path = [NSString stringWithFormat:
+        @"/api/song/lyric?id=%@&lv=-1&tv=-1&yv=-1", song.songID];
     [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
         if (error) { complete(nil, error); return; }
-        NSString *lrc = json[@"lrc"][@"lyric"];
-        if (![lrc isKindOfClass:[NSString class]]) { complete(@[], nil); return; }
+        if (![json isKindOfClass:[NSDictionary class]]) { complete(nil, nil); return; }
 
-        NSMutableArray *lines = [NSMutableArray array];
-        for (NSString *raw in [lrc componentsSeparatedByString:@"\n"]) {
-            // 形如 [00:12.570]难以忘记初次见你
-            if (![raw hasPrefix:@"["]) continue;
-            NSRange close = [raw rangeOfString:@"]"];
-            if (close.location == NSNotFound) continue;
-            NSString *stamp = [raw substringWithRange:NSMakeRange(1, close.location - 1)];
-            NSString *text  = [raw substringFromIndex:close.location + 1];
-            NSArray *parts = [stamp componentsSeparatedByString:@":"];
-            if (parts.count < 2) continue;
-            double sec = ((NSString *)parts[0]).doubleValue * 60.0
-                       + ((NSString *)parts[1]).doubleValue;
-            if (!text.length) continue;
-            [lines addObject:@{@"t": @(sec), @"text": text}];
-        }
-        complete(lines, nil);
+        NSString *lrc = json[@"lrc"][@"lyric"];
+        NSString *tl  = json[@"tlyric"][@"lyric"];
+        NSString *yrc = json[@"yrc"][@"lyric"];
+
+        NELyric *lyric = [NELyric lyricWithLRC:(lrc.length ? lrc : nil)
+                                       tlyric:(tl.length ? tl : nil)
+                                          yrc:(yrc.length ? yrc : nil)];
+        complete(lyric, nil);
     }];
 }
 
