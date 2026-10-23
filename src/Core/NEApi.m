@@ -218,7 +218,8 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
             NSString *text  = [raw substringFromIndex:close.location + 1];
             NSArray *parts = [stamp componentsSeparatedByString:@":"];
             if (parts.count < 2) continue;
-            double sec = parts[0].doubleValue * 60.0 + parts[1].doubleValue;
+            double sec = ((NSString *)parts[0]).doubleValue * 60.0
+                       + ((NSString *)parts[1]).doubleValue;
             if (!text.length) continue;
             [lines addObject:@{@"t": @(sec), @"text": text}];
         }

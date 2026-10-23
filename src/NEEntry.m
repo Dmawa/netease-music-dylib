@@ -10,6 +10,10 @@
 #import "NEFloatingBall.h"
 #import "NEMainPanel.h"
 
+@interface NEEntry : NSObject
++ (void)launch;
+@end
+
 __attribute__((constructor))
 static void NEMusicBootstrap(void) {
     // 构造器可能在非主线程/极早期执行，统一挪到主队列且等 App 起来
@@ -17,10 +21,6 @@ static void NEMusicBootstrap(void) {
         [NEEntry launch];
     });
 }
-
-@interface NEEntry : NSObject
-+ (void)launch;
-@end
 
 @implementation NEEntry
 
