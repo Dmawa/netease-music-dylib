@@ -374,6 +374,14 @@ typedef NS_ENUM(NSInteger, NELoginState) {
     }];
 }
 
+- (void)finishLogin:(NSString *)nickname {
+    [self stop];                    // 停止轮询，避免后续误触发风控
+    [self applyState:NELoginStateSuccess message:@"登录成功"];
+    if ([self.delegate respondsToSelector:@selector(loginViewDidLogin:nickname:)]) {
+        [self.delegate loginViewDidLogin:self nickname:nickname];
+    }
+}
+
 - (void)cancelTapped {
     [self stop];
     if ([self.delegate respondsToSelector:@selector(loginViewDidCancel:)]) {
