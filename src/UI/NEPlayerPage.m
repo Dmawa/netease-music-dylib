@@ -282,7 +282,15 @@
 }
 
 - (CGFloat)uiScale {
-    CGFloat s = MIN(self.bounds.size.width / 1000.0, self.bounds.size.height / 760.0);
+    CGFloat w = self.bounds.size.width;
+    CGFloat h = self.bounds.size.height;
+    CGFloat s;
+    if (w >= 620) {
+        s = MIN(w / 1000.0, h / 760.0);
+    } else {
+        // 竖屏按宽度放大，元素才能撑满
+        s = w / 480.0;
+    }
     return MIN(MAX(s, 0.85), 1.45);
 }
 
@@ -414,29 +422,31 @@
         _lyricView.hidden = NO;
         _lyricView.frame = CGRectMake(lyricX, margin, MAX(160, lyricW), H - margin * 2 - bottomBarH);
     } else {
-        CGFloat disc = MIN(W * 0.56, H * 0.32);
-        disc = MIN(MAX(disc, 100), 250);
-        CGFloat titleH = 26 * s, gap1 = 4 * s, artistH = 16 * s, gap2 = 12 * s;
-        CGFloat barH = 18 * s, gap3 = 18 * s, timeH = 13 * s, gap4 = 24 * s, ctrlH = 44 * s;
+        CGFloat titleH = 30 * s, gap1 = 4 * s, artistH = 18 * s, gap2 = 14 * s;
+        CGFloat barH = 18 * s, gap3 = 20 * s, timeH = 13 * s, gap4 = 28 * s, ctrlH = 48 * s;
         CGFloat infoH = titleH + gap1 + artistH + gap2 + barH + gap3 + timeH + gap4 + ctrlH;
-        CGFloat groupH = disc + 20 * s + infoH;
-        CGFloat topY = MAX(10, (H - bottomBarH - groupH) / 2 - 6);
+
+        CGFloat topY = margin + 6 * s;
+        CGFloat availH = H - bottomBarH - topY - 10 * s;
+        CGFloat maxDisc = availH - infoH - 56 * s;
+        CGFloat disc = MIN(W * 0.72, maxDisc);
+        disc = MIN(MAX(disc, 110), 420);
         CGFloat discX = (W - disc) / 2;
         [self placeVinylAt:CGPointMake(discX, topY) size:disc];
 
-        CGFloat infoY = topY + disc + 20 * s;
+        CGFloat infoY = topY + disc + 22 * s;
         _titleLabel.textAlignment = NSTextAlignmentCenter;
-        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2, titleH);
+        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2 - 124 * s, titleH);
         _artistLabel.textAlignment = NSTextAlignmentCenter;
-        _artistLabel.frame = CGRectMake(margin, infoY + titleH + gap1, W - margin * 2 - 80 * s, artistH);
+        _artistLabel.frame = CGRectMake(margin, infoY + titleH + gap1, W - margin * 2 - 124 * s, artistH);
         _vipBadge.frame = CGRectMake(W - margin - 30 * s, infoY + titleH + gap1, 26 * s, 13 * s);
-        _followBtn.frame = CGRectMake(W / 2 + 30 * s, infoY + titleH + gap1 + (artistH - 20 * s) / 2, 48 * s, 20 * s);
+        _followBtn.frame = CGRectMake(W / 2 + 34 * s, infoY + titleH + gap1 + (artistH - 20 * s) / 2, 48 * s, 20 * s);
         _followBtn.layer.cornerRadius = 10 * s;
 
         CGFloat likeS = 24 * s;
-        _likeBtn.frame = CGRectMake(W - margin - 100 * s, infoY + 4 * s, likeS, likeS);
-        _likeCountLabel.frame = CGRectMake(W - margin - 72 * s, infoY + 6 * s, 64 * s, 20 * s);
-        _commentBtn.frame = CGRectMake(W - margin - 24 * s, infoY + 4 * s, likeS, likeS);
+        _likeBtn.frame = CGRectMake(W - margin - 104 * s, infoY + 3 * s, likeS, likeS);
+        _likeCountLabel.frame = CGRectMake(W - margin - 78 * s, infoY + 4 * s, 64 * s, 20 * s);
+        _commentBtn.frame = CGRectMake(W - margin - 26 * s, infoY + 3 * s, likeS, likeS);
         _commentCountLabel.hidden = YES;
 
         CGFloat barY = infoY + titleH + gap1 + artistH + gap2;
@@ -447,8 +457,8 @@
 
         CGFloat cy = barY + barH + gap3 + timeH + gap4;
         CGFloat cx = W / 2;
-        CGFloat gap = 26 * s;
-        CGFloat loopS = 28 * s, navS = 28 * s, playS = 44 * s, listS = 28 * s;
+        CGFloat gap = 30 * s;
+        CGFloat loopS = 30 * s, navS = 30 * s, playS = 46 * s, listS = 30 * s;
         CGFloat clusterW = loopS + navS + playS + navS + listS + gap * 4;
         CGFloat sx = cx - clusterW / 2;
         _loopBtn.frame = CGRectMake(sx, cy - loopS / 2, loopS, loopS);
@@ -457,9 +467,9 @@
         _nextBtn.frame = CGRectMake(sx + loopS + gap + navS + gap + playS + gap, cy - navS / 2, navS, navS);
         _listBtn.frame = CGRectMake(sx + clusterW - listS, cy - listS / 2, listS, listS);
 
-        CGFloat lyricTop = cy + 26 * s;
-        CGFloat lyricH = H - lyricTop - bottomBarH - 6;
-        _lyricView.hidden = (lyricH < 40);
+        CGFloat lyricTop = cy + 24 * s;
+        CGFloat lyricH = H - lyricTop - bottomBarH - 8;
+        _lyricView.hidden = (lyricH < 44);
         _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(0, lyricH));
     }
 }
