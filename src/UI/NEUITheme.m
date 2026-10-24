@@ -62,9 +62,40 @@ static BOOL NEColorEqual(UIColor *a, UIColor *b) {
            fabs(b1 - b2) < 0.01 && fabs(a1 - a2) < 0.01;
 }
 
-/// 深色 -> 浅色 的已知配色映射
+/// 深色 -> 浅色 的配色映射：先按已知色对，再对灰阶做通用反相
 static UIColor *NEMapColor(UIColor *c, BOOL toLight) {
     if (!c) return c;
+
+    // 品牌红不动
+    if (NEColorEqual(c, NEColor(0xE60026, 1.0))) return c;
+
+    // 通用灰阶反相：近白 -> 近黑，近黑 -> 近白（保留 alpha）
+    CGFloat r0 = 0, g0 = 0, b0 = 0, a0 = 0;
+    if ([c getRed:&r0 green:&g0 blue:&b0 alpha:&a0]) {
+        BOOL grayish = fabs(r0 - g0) < 0.06 && fabs(g0 - b0) < 0.06;
+        if (grayish) {
+            CGFloat lum = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+            if (toLight) {
+                if (lum > 0.72) {
+                    CGFloat target = MAX(0.06, 0.16 - (lum - 0.72) * 0.3);
+                    return [UIColor colorWithRed:target green:target blue:target alpha:a0];
+                }
+                if (lum < 0.28 && a0 > 0.5) {
+                    CGFloat target = MIN(0.98, 1.0 - lum * 0.35);
+                    return [UIColor colorWithRed:target green:target blue:target alpha:a0];
+                }
+            } else {
+                if (lum < 0.30 && a0 > 0.5) {
+                    CGFloat target = MIN(1.0, 1.0 - lum * 0.5);
+                    return [UIColor colorWithRed:target green:target blue:target alpha:a0];
+                }
+                if (lum > 0.90 && a0 > 0.9) {
+                    return [UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:a0];
+                }
+            }
+        }
+    }
+
     // 背景
     if (NEColorEqual(c, NEColor(0x121212, 1.0))) return toLight ? NEColor(0xF6F6F6, 1.0) : c;
     if (NEColorEqual(c, NEColor(0xF6F6F6, 1.0))) return toLight ? c : NEColor(0x121212, 1.0);
@@ -88,6 +119,7 @@ static UIColor *NEMapColor(UIColor *c, BOOL toLight) {
 
 void NEApplyThemeToView(UIView *view) {
     if (!view) return;
+    if (view.tag == NETagNoTheme) return;
     BOOL light = NELightModeEnabled();
 
     if (view.backgroundColor) {
@@ -128,6 +160,36 @@ void NEApplyThemeToView(UIView *view) {
         if (tv.separatorColor) {
             UIColor *mapped = NEMapColor(tv.separatorColor, light);
             if (mapped != tv.separatorColor) tv.separatorColor = mapped;
+        }
+        if (tv.backgroundView.backgroundColor) {
+            UIColor *mapped = NEMapColor(tv.backgroundView.backgroundColor, light);
+            if (mapped != tv.backgroundView.backgroundColor) tv.backgroundView.backgroundColor = mapped;
+        }
+    } else if ([view isKindOfClass:[UISearchBar class]]) {
+        UISearchBar *sb = (UISearchBar *)view;
+        UITextField *tf = [sb valueForKey:@"searchField"];
+        if ([tf isKindOfClass:[UITextField class]]) {
+            tf.backgroundColor = NE_CARD;
+            tf.textColor = NE_TEXT;
+            tf.attributedPlaceholder = [[NSAttributedString alloc]
+                initWithString:tf.placeholder ?: @""
+                    attributes:@{NSForegroundColorAttributeName: NE_TEXT_DIM}];
+        }
+    } else if ([view isKindOfClass:[UITableViewCell class]]) {
+        UITableViewCell *cell = (UITableViewCell *)view;
+        if (cell.textLabel.textColor) {
+            UIColor *mapped = NEMapColor(cell.textLabel.textColor, light);
+            if (mapped != cell.textLabel.textColor) cell.textLabel.textColor = mapped;
+        }
+        if (cell.detailTextLabel.textColor) {
+            UIColor *mapped = NEMapColor(cell.detailTextLabel.textColor, light);
+            if (mapped != cell.detailTextLabel.textColor) cell.detailTextLabel.textColor = mapped;
+        }
+        if (cell.selectedBackgroundView.backgroundColor) {
+            UIColor *mapped = NEMapColor(cell.selectedBackgroundView.backgroundColor, light);
+            if (mapped != cell.selectedBackgroundView.backgroundColor) {
+                cell.selectedBackgroundView.backgroundColor = mapped;
+            }
         }
     } else if ([view isKindOfClass:[UISlider class]]) {
         UISlider *slider = (UISlider *)view;

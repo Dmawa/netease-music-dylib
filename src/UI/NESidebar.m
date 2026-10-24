@@ -36,7 +36,7 @@
 }
 
 - (void)configureWithItem:(NESidebarItem *)item selected:(BOOL)selected {
-    UIColor *c = selected ? NE_TEXT : NEColor(0xFFFFFF, 0.50);
+    UIColor *c = selected ? NE_TEXT : NE_TEXT_DIM;
     NSString *iconName = selected ? (item.iconNameSelected ?: item.iconName) : item.iconName;
     _icon.image = [UIImage systemImageNamed:iconName ?: @"circle"];
     _icon.tintColor = c;

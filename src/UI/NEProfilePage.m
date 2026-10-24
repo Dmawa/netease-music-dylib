@@ -79,7 +79,7 @@
         _cover.backgroundColor = NE_BRAND;
         _cover.image = nil;
         _badge.image = [UIImage systemImageNamed:@"heart.fill"];
-        _badge.tintColor = UIColor.whiteColor;
+        _badge.tintColor = NE_TEXT;
         _badge.hidden = NO;
     } else {
         _badge.hidden = YES;

@@ -68,6 +68,7 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
         self.backgroundColor = UIColor.clearColor;
+        self.tag = NETagNoTheme;   // 播放页固定深色（衬专辑封面），不参与换肤
         _showsTranslation = YES;
         [self build];
         [self observe];

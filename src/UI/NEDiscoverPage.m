@@ -21,7 +21,7 @@
 
         _icon = [[UIImageView alloc] initWithFrame:CGRectZero];
         _icon.contentMode = UIViewContentModeScaleAspectFit;
-        _icon.tintColor = UIColor.whiteColor;
+        _icon.tintColor = NE_TEXT;
         [self addSubview:_icon];
 
         _title = [UILabel new];

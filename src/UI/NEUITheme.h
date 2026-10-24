@@ -27,6 +27,9 @@ UIColor *NETextColor(void);
 UIColor *NETextDimColor(void);
 UIColor *NEStrokeColor(void);
 
+/// 标记：该视图（及其子树）不参与换肤（例如播放页、二维码这类固定深色区域）
+static const NSInteger NETagNoTheme = 0x4E45;
+
 /// 递归把已有视图的配色换成当前主题（用于运行时切换）
 void NEApplyThemeToView(UIView *view);
 
