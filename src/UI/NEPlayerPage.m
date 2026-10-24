@@ -344,7 +344,7 @@
     _coverBlur.frame = self.bounds;
     _shade.frame = self.bounds;
 
-    BOOL wide = (W >= 620);
+    BOOL wide = (W >= 620 && H >= 470);
     CGFloat margin = (wide ? 30.0 : 20.0);
     CGFloat bottomBarH = 36.0 * s;
 

@@ -1,6 +1,15 @@
 #import "NEFloatingBall.h"
 #import "NEUITheme.h"
 
+/// 允许跟随宿主旋转的根控制器（否则自定义 UIWindow 只会停在竖屏）
+@interface NEFloatingRootVC : UIViewController
+@end
+
+@implementation NEFloatingRootVC
+- (BOOL)shouldAutorotate { return YES; }
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskAll; }
+@end
+
 @interface NEFloatingBall () <UIGestureRecognizerDelegate>
 @property (nonatomic, strong) UIButton *ball;
 @property (nonatomic, strong) UIView *panelContainer;
@@ -9,6 +18,8 @@
 @property (nonatomic, assign) BOOL expanded;
 @property (nonatomic, assign) BOOL hasPositioned;
 @property (nonatomic, assign) CGSize preferredPanelSize;
+/// 用户手动拖过右下角后，旋转时不再自动改尺寸
+@property (nonatomic, assign) BOOL userResized;
 @end
 
 @implementation NEFloatingBall
@@ -25,7 +36,7 @@
     if ((self = [super initWithFrame:frame])) {
         self.windowLevel = UIWindowLevelAlert + 100;
         self.backgroundColor = UIColor.clearColor;
-        self.rootViewController = [UIViewController new];
+        self.rootViewController = [NEFloatingRootVC new];
         self.rootViewController.view.backgroundColor = UIColor.clearColor;
         self.hidden = NO;
 
@@ -160,6 +171,7 @@
     f.size = s;
     // 保持左上角不动，避免拖动时跳动
     self.panelContainer.frame = f;
+    self.userResized = YES;
     [self layoutPanelContent];
 }
 
@@ -182,14 +194,20 @@
 
 - (CGSize)defaultPanelSize {
     CGSize screen = self.bounds.size;
+    if (screen.width < 1 || screen.height < 1) screen = [UIScreen mainScreen].bounds.size;
+    BOOL landscape = (screen.width > screen.height);
     BOOL pad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) || screen.width >= 700;
+
+    if (landscape) {
+        CGFloat w = MIN(pad ? 1000 : 860, screen.width - 80);
+        CGFloat h = MIN(560, screen.height - 60);
+        return CGSizeMake(MAX(420, w), MAX(260, h));
+    }
     if (pad) {
-        // iPad：更宽更长，接近网易云的横屏播放页比例
         CGFloat w = MIN(720, screen.width - 80);
         CGFloat h = MIN(560, screen.height - 120);
         return CGSizeMake(MAX(460, w), MAX(420, h));
     }
-    // iPhone 横屏时也要收缩
     CGFloat w = MIN(NE_PANEL_WIDTH, screen.width - 24);
     CGFloat h = MIN(460, screen.height - 80);
     return CGSizeMake(w, MAX(300, h));
@@ -275,7 +293,12 @@
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         // window 尺寸跟随屏幕
-        CGRect screen = [UIScreen mainScreen].bounds;
+        CGRect screen = self.bounds;
+        if (@available(iOS 13.0, *)) {
+            if ([self.windowScene isKindOfClass:[UIWindowScene class]]) {
+                screen = ((UIWindowScene *)self.windowScene).coordinateSpace.bounds;
+            }
+        }
         if (!CGSizeEqualToSize(self.bounds.size, screen.size)) {
             self.frame = screen;
         }
@@ -287,7 +310,12 @@
             self.ball.center = c;
         }
         if (self.expanded) {
-            // 面板可能超出新屏幕，重新夹取并重排
+            // 旋转后给面板换成对应的默认尺寸（用户手动拖过就不再自动改）
+            if (!self.userResized) {
+                CGRect f = self.panelContainer.frame;
+                f.size = [self defaultPanelSize];
+                self.panelContainer.frame = f;
+            }
             CGPoint c = self.panelContainer.center;
             [self clampPanelCenter:&c];
             self.panelContainer.center = c;
