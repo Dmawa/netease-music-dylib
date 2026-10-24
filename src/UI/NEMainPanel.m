@@ -238,7 +238,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
-    self.settingsPage.hidden = YES;      // 切 tab 时关掉设置页
+    [self hideSettingsImmediately];      // 切 tab 时关掉设置页
     if (self.tab == NEPanelTabPlayer) [self setNeedsLayout];
     self.tab = (NEPanelTab)index;
     if (self.tab == NEPanelTabRecommend) self.browsingList = NO;
@@ -617,10 +617,19 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
     // 播客 / 笔记：用 9.6.13 二进制里挖到的接口（参数还在补）
     _podcastPage = [[NEFeedPage alloc] initWithTitle:@"播客"
-                                                path:@"/api/podcast/rcmd/tab/infinite/blocks/get"
-                                              params:@{@"pageCode": @"PODCAST_TAB_V2",
-                                                       @"subParams": @"{}"}
-                                           arrayKeys:@[@"data.blocks", @"data.list", @"data", @"list"]];
+        loader:^(void (^done)(NSArray *items, NSError *error)) {
+            [[NEApi shared] fetchPodcastHomeWithPageCode:@"PODCAST_HOMEPAGE_PODCAST_TAB"
+                                                complete:^(NSArray<NERecommendItem *> *items, NSError *err) {
+                NSMutableArray *rows = [NSMutableArray array];
+                for (NERecommendItem *it in items) {
+                    if (![it isKindOfClass:[NERecommendItem class]]) continue;
+                    [rows addObject:@{@"title": it.title ?: @"",
+                                      @"subTitle": it.subtitle ?: @"",
+                                      @"coverUrl": it.coverURL ?: @""}];
+                }
+                done(rows, err);
+            }];
+        }];
     _podcastPage.hidden = YES;
     [self addSubview:_podcastPage];
 
@@ -642,33 +651,71 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 }
 
 - (void)profilePageDidTapSettings:(id)page {
+    [self presentSettings];
+}
+
+- (void)presentSettings {
     self.settingsPage.hidden = NO;
     [self.settingsPage reloadData];
+    self.settingsPage.alpha = 0;
+    self.settingsPage.transform = CGAffineTransformMakeTranslation(0, 32);
+    [UIView animateWithDuration:0.26 delay:0
+                         options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        self.settingsPage.alpha = 1;
+        self.settingsPage.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)hideSettingsImmediately {
+    self.settingsPage.hidden = YES;
+    self.settingsPage.alpha = 1;
+    self.settingsPage.transform = CGAffineTransformIdentity;
+}
+
+- (void)dismissSettingsWithCompletion:(void (^ _Nullable)(void))completion {
+    [UIView animateWithDuration:0.2 delay:0
+                         options:UIViewAnimationOptionCurveEaseIn
+                     animations:^{
+        self.settingsPage.alpha = 0;
+        self.settingsPage.transform = CGAffineTransformMakeTranslation(0, 26);
+    } completion:^(BOOL finished) {
+        self.settingsPage.hidden = YES;
+        self.settingsPage.alpha = 1;
+        self.settingsPage.transform = CGAffineTransformIdentity;
+        if (completion) completion();
+    }];
 }
 
 - (void)settingsPageDidClose:(id)page {
-    self.settingsPage.hidden = YES;
+    [self dismissSettingsWithCompletion:nil];
 }
 
 - (void)settingsPageDidLogout:(id)page {
-    [[NEApi shared] logout];
-    self.settingsPage.hidden = YES;
-    [self loadAccountThenDiscover];
-    [self.profilePage reloadData];
+    __weak typeof(self) weakSelf = self;
+    [self dismissSettingsWithCompletion:^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [[NEApi shared] logout];
+        [self loadAccountThenDiscover];
+        [self.profilePage reloadData];
+    }];
 }
 
 - (void)settingsPageDidRequestSwitchAccount:(id)page {
-    [[NEApi shared] logout];
-    self.settingsPage.hidden = YES;
-    [self loadAccountThenDiscover];
-    [self.profilePage reloadData];
-    // 登出后直接弹登录（扫码 / 其他登录方式）
     __weak typeof(self) weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{
+    [self dismissSettingsWithCompletion:^{
         __strong typeof(weakSelf) self = weakSelf;
-        if (self) [self showLogin];
-    });
+        if (!self) return;
+        [[NEApi shared] logout];
+        [self loadAccountThenDiscover];
+        [self.profilePage reloadData];
+        // 登出后直接弹登录（扫码 / 其他登录方式）
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [self showLogin];
+        });
+    }];
 }
 
 #pragma mark - 播放条
@@ -741,20 +788,44 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)openPlayerPage {
     if (self.tab == NEPanelTabPlayer) return;
     self.previousTab = (NSInteger)self.tab;
-    self.settingsPage.hidden = YES;
+    [self hideSettingsImmediately];
     self.tab = NEPanelTabPlayer;
     [self highlightTab];
     [self setNeedsLayout];
     [self reload];
+    [self animatePlayerIn];
+}
+
+- (void)animatePlayerIn {
+    self.playerPage.alpha = 0;
+    self.playerPage.transform = CGAffineTransformMakeTranslation(0, 28);
+    [UIView animateWithDuration:0.26 delay:0
+                         options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        self.playerPage.alpha = 1;
+        self.playerPage.transform = CGAffineTransformIdentity;
+    } completion:nil];
 }
 
 - (void)closePlayerPage {
-    NEPanelTab back = (NEPanelTab)self.previousTab;
-    if (back == NEPanelTabPlayer || back < 0) back = NEPanelTabRecommend;
-    self.tab = back;
-    [self highlightTab];
-    [self setNeedsLayout];
-    [self reload];
+    __weak typeof(self) weakSelf = self;
+    [UIView animateWithDuration:0.2 delay:0
+                         options:UIViewAnimationOptionCurveEaseIn
+                     animations:^{
+        self.playerPage.alpha = 0;
+        self.playerPage.transform = CGAffineTransformMakeTranslation(0, 24);
+    } completion:^(BOOL finished) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.playerPage.alpha = 1;
+        self.playerPage.transform = CGAffineTransformIdentity;
+        NEPanelTab back = (NEPanelTab)self.previousTab;
+        if (back == NEPanelTabPlayer || back < 0) back = NEPanelTabRecommend;
+        self.tab = back;
+        [self highlightTab];
+        [self setNeedsLayout];
+        [self reload];
+    }];
 }
 
 - (void)seekEnd {

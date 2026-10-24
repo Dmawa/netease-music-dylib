@@ -242,6 +242,52 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
 }
 
 /// 批量取歌曲详情（v6 playlist/detail 的 tracks 只给前 10 首，必须用 trackIds 补全）
+- (void)fetchPodcastHomeWithPageCode:(NSString *)pageCode
+                            complete:(void (^)(NSArray<NERecommendItem *> *, NSError *))complete {
+    if (!pageCode.length) { complete(@[], nil); return; }
+    [[NESession shared] GET:@"/api/voice/homepage/block/page"
+                     params:@{@"pageCode": pageCode}
+                   complete:^(id json, NSError *error) {
+        if (error) { complete(nil, error); return; }
+        NSArray *blocks = json[@"data"][@"blocks"];
+        NSMutableArray *out = [NSMutableArray array];
+        if ([blocks isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *block in blocks) {
+                if (![block isKindOfClass:[NSDictionary class]]) continue;
+                NSArray *creatives = block[@"creatives"];
+                if (![creatives isKindOfClass:[NSArray class]]) continue;
+                for (NSDictionary *c in creatives) {
+                    if (![c isKindOfClass:[NSDictionary class]]) continue;
+                    NSArray *resources = c[@"resources"];
+                    if (![resources isKindOfClass:[NSArray class]]) continue;
+                    for (NSDictionary *res in resources) {
+                        if (![res isKindOfClass:[NSDictionary class]]) continue;
+                        NSDictionary *ui = [res[@"uiElement"] isKindOfClass:[NSDictionary class]] ? res[@"uiElement"] : nil;
+                        NSDictionary *main = [ui[@"mainTitle"] isKindOfClass:[NSDictionary class]] ? ui[@"mainTitle"] : nil;
+                        NSDictionary *sub = [ui[@"subTitle"] isKindOfClass:[NSDictionary class]] ? ui[@"subTitle"] : nil;
+                        NSDictionary *img = [ui[@"image"] isKindOfClass:[NSDictionary class]] ? ui[@"image"] : nil;
+                        NSString *title = NEString(main[@"title"]);
+                        if (!title.length) continue;
+
+                        NERecommendItem *item = [NERecommendItem new];
+                        item.itemID = res[@"resourceId"] ? [res[@"resourceId"] description] : @"";
+                        item.title = title;
+                        item.subtitle = NEString(sub[@"title"]);
+                        NSString *cover = NEString(img[@"imageUrl"]);
+                        if ([cover hasPrefix:@"http://"]) {
+                            cover = [@"https://" stringByAppendingString:[cover substringFromIndex:7]];
+                        }
+                        item.coverURL = cover;
+                        item.kind = 2;
+                        [out addObject:item];
+                    }
+                }
+            }
+        }
+        complete(out, nil);
+    }];
+}
+
 - (void)fetchSongsByIDs:(NSArray<NSString *> *)ids complete:(NESongsBlock)complete {
     [self fetchSongsByIDs:ids offset:0 collected:[NSMutableArray array] complete:complete];
 }

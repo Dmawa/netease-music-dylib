@@ -126,6 +126,10 @@ typedef void (^NELyricBlock)(NELyric * _Nullable lyric, NSError * _Nullable erro
              liked:(BOOL)liked
           complete:(void (^)(BOOL ok, NSError * _Nullable error))complete;
 /// 「我的」页头部（followText/followedText/levelText/listenSongs 等）
+/// 播客首页信息流（/api/voice/homepage/block/page，pageCode 如 PODCAST_HOMEPAGE_PODCAST_TAB）
+- (void)fetchPodcastHomeWithPageCode:(NSString *)pageCode
+                            complete:(void (^)(NSArray<NERecommendItem *> * _Nullable items,
+                                               NSError * _Nullable error))complete;
 - (void)fetchMineHeaderWithUserID:(NSString *)uid
                          complete:(void (^)(NSDictionary * _Nullable header,
                                             NSError * _Nullable error))complete;

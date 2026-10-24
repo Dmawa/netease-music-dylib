@@ -10,6 +10,7 @@
 @property (nonatomic, strong) UITableView *table;
 @property (nonatomic, strong) NSArray<NSDictionary *> *items;
 @property (nonatomic, copy) NSString *status;
+@property (nonatomic, copy, nullable) NEFeedLoader loader;
 @end
 
 @implementation NEFeedPage
@@ -23,6 +24,17 @@
         _path = [path copy];
         _params = [params copy];
         _arrayKeys = arrayKeys.count ? arrayKeys : @[@"data.blocks", @"data.list", @"data", @"list", @"result"];
+        self.backgroundColor = UIColor.clearColor;
+        [self build];
+    }
+    return self;
+}
+
+- (instancetype)initWithTitle:(NSString *)title loader:(NEFeedLoader)loader {
+    if ((self = [super initWithFrame:CGRectZero])) {
+        _feedTitle = [title copy];
+        _loader = [loader copy];
+        _arrayKeys = @[@"data"];
         self.backgroundColor = UIColor.clearColor;
         [self build];
     }
@@ -50,28 +62,39 @@
     [self.table reloadData];
 
     __weak typeof(self) weakSelf = self;
+    if (self.loader) {
+        self.loader(^(NSArray *items, NSError *error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            [self applyRawItems:items error:error message:nil];
+        });
+        return;
+    }
+
     [[NESession shared] GET:self.path params:self.params complete:^(id json, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
-
-        if (error) {
-            self.status = error.localizedDescription;
-            self.items = @[];
-            [self.table reloadData];
-            return;
-        }
-        NSArray *arr = [self findArrayIn:json];
-        NSMutableArray *rows = [NSMutableArray array];
-        for (id obj in arr) {
-            if ([obj isKindOfClass:[NSDictionary class]]) [rows addObject:obj];
-            // 有些 block 是 {data: {...}} 再包一层
-            else if ([obj isKindOfClass:[NSDictionary class]]) {}
-        }
-        self.items = rows;
-        self.status = rows.count ? nil : ([json[@"message"] isKindOfClass:[NSString class]]
-                                          ? json[@"message"] : @"没有内容");
-        [self.table reloadData];
+        NSArray *arr = error ? @[] : [self findArrayIn:json];
+        NSString *message = [json isKindOfClass:[NSDictionary class]] &&
+                            [json[@"message"] isKindOfClass:[NSString class]] ? json[@"message"] : nil;
+        [self applyRawItems:arr error:error message:message];
     }];
+}
+
+- (void)applyRawItems:(NSArray *)arr error:(NSError *)error message:(NSString *)message {
+    if (error) {
+        self.status = error.localizedDescription;
+        self.items = @[];
+        [self.table reloadData];
+        return;
+    }
+    NSMutableArray *rows = [NSMutableArray array];
+    for (id obj in arr) {
+        if ([obj isKindOfClass:[NSDictionary class]]) [rows addObject:obj];
+    }
+    self.items = rows;
+    self.status = rows.count ? nil : (message.length ? message : @"没有内容");
+    [self.table reloadData];
 }
 
 - (NSArray *)findArrayIn:(id)json {
