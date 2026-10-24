@@ -13,6 +13,7 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     NESettingsActionSwitchAccount,
     NESettingsActionLogout,
     NESettingsActionCrashLog,
+    NESettingsActionTheme,
 };
 
 @interface NESettingsPage () <UITableViewDataSource, UITableViewDelegate>
@@ -86,17 +87,20 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     NSMutableArray<NSString *> *about = [@[@"我的客服", @"我的订单", @"分享网易云音乐", @"关于"] mutableCopy];
     if (NECrashLogLast().length) [about addObject:@"上次崩溃"];
 
+    NSString *themeRow = NELightModeEnabled() ? @"黑白模式 · 白色" : @"黑白模式 · 黑色";
+    NSArray *appearance = @[themeRow, @"边听边存", @"音乐黑名单", @"青少年模式"];
+
     if (self.loggedIn) {
         self.sections = @[
             @[@"我的消息", @"我的云贝", @"徽章中心", @"装扮中心"],
-            @[@"边听边存", @"音乐黑名单", @"青少年模式", @"音乐闹钟"],
+            appearance,
             [about copy],
             @[@"手机专属邮箱", @"切换账号", @"退出登录"],
         ];
     } else {
         self.sections = @[
             @[@"我的消息", @"我的云贝", @"徽章中心", @"装扮中心"],
-            @[@"边听边存", @"音乐黑名单", @"青少年模式", @"音乐闹钟"],
+            appearance,
             [about copy],
         ];
     }
@@ -273,6 +277,25 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     if (host) [host presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)toggleTheme {
+    NESetLightMode(!NELightModeEnabled());
+    [self rebuildSections];
+    [self.table reloadData];
+    NEApplyThemeToView(self.window);
+    [self applyThemeColors];
+}
+
+/// 设置页自身的固定配色（NEApplyThemeToView 之外再补一次，保证立即生效）
+- (void)applyThemeColors {
+    self.backgroundColor = NE_BG;
+    self.topBar.backgroundColor = NE_BG;
+    self.titleLabel.textColor = NE_TEXT;
+    self.nameLabel.textColor = NE_TEXT;
+    self.uidLabel.textColor = NE_TEXT_DIM;
+    self.table.backgroundColor = UIColor.clearColor;
+    self.table.separatorColor = NE_STROKE;
+}
+
 - (void)showCrashLog {
     NSString *info = NECrashLogLast();
     if (!info.length) info = @"没有崩溃记录";
@@ -373,6 +396,7 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
     if ([title isEqualToString:@"分享网易云音乐"]) return NESettingsActionShare;
     if ([title isEqualToString:@"关于"]) return NESettingsActionAbout;
     if ([title isEqualToString:@"上次崩溃"]) return NESettingsActionCrashLog;
+    if ([title hasPrefix:@"黑白模式"]) return NESettingsActionTheme;
     if ([title isEqualToString:@"切换账号"]) return NESettingsActionSwitchAccount;
     if ([title isEqualToString:@"退出登录"]) return NESettingsActionLogout;
     return NESettingsActionPlaceholder;
@@ -400,6 +424,9 @@ typedef NS_ENUM(NSInteger, NESettingsAction) {
             break;
         case NESettingsActionCrashLog:
             [self showCrashLog];
+            break;
+        case NESettingsActionTheme:
+            [self toggleTheme];
             break;
         default:
             [self showAlertWithTitle:title message:@"该功能暂未接入"];

@@ -19,6 +19,7 @@ Player_FILES = src/NEEntry.m \
                src/Core/NEPlayer.m \
                src/Core/NELyric.m \
                src/Core/NEImageCache.m \
+               src/UI/NEUITheme.m \
                src/UI/NEFloatingBall.m \
                src/UI/NEMainPanel.m \
                src/UI/NEPlayerPage.m \

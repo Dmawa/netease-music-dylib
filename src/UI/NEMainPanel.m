@@ -139,6 +139,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
         [self buildPlayerPage];
         [self buildPlayerBar];
         [self observePlayer];
+        [self observeTheme];
         [self buildSettingsPage];      // 最后加，保证盖在所有内容之上
     }
     return self;
@@ -830,6 +831,21 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)seekEnd {
     [[NEPlayer shared] seekTo:self.progress.value];
+}
+
+- (void)observeTheme {
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(themeChanged)
+                                                 name:NEThemeChangedNotification
+                                               object:nil];
+}
+
+- (void)themeChanged {
+    self.backgroundColor = NE_BG;
+    NEApplyThemeToView(self);
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
+    [self reload];
 }
 
 - (void)observePlayer {

@@ -287,6 +287,16 @@
                name:UIDeviceOrientationDidChangeNotification object:nil];
     [nc addObserver:self selector:@selector(onOrientationChanged)
                name:UIWindowDidBecomeKeyNotification object:nil];
+    [nc addObserver:self selector:@selector(onThemeChanged)
+               name:NEThemeChangedNotification object:nil];
+}
+
+- (void)onThemeChanged {
+    self.panelContainer.backgroundColor = NE_PANEL;
+    self.panelContainer.layer.borderColor = NE_STROKE.CGColor;
+    UIView *grip = [self.dragHandle viewWithTag:9001];
+    grip.backgroundColor = NELightModeEnabled() ? NEColor(0x000000, 0.22) : NEColor(0xFFFFFF, 0.22);
+    NEApplyThemeToView(self.rootViewController.view);
 }
 
 - (void)onOrientationChanged {
