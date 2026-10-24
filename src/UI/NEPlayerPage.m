@@ -7,21 +7,27 @@
 #import "NEPlaylistSheet.h"
 
 @interface NEPlayerPage () <NELyricViewDelegate>
-@property (nonatomic, strong) UIImageView *coverBlurBackdrop;
+@property (nonatomic, strong) UIImageView *coverBackdrop;
 @property (nonatomic, strong) UIVisualEffectView *coverBlur;
-@property (nonatomic, strong) UIView *dimView;
+@property (nonatomic, strong) CAGradientLayer *shade;
 
 @property (nonatomic, strong) UIView *vinylBox;
 @property (nonatomic, strong) UIView *discBase;
+@property (nonatomic, strong) UIView *discRing;
 @property (nonatomic, strong) UIImageView *discCover;
 @property (nonatomic, strong) UIView *centerDot;
+@property (nonatomic, strong) UIView *armBox;
 @property (nonatomic, strong) UIView *tonearm;
+@property (nonatomic, strong) UIView *tonearmHead;
 
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *artistLabel;
+@property (nonatomic, strong) UIButton *followBtn;
 @property (nonatomic, strong) UILabel *vipBadge;
 @property (nonatomic, strong) UIButton *likeBtn;
+@property (nonatomic, strong) UILabel *likeCountLabel;
 @property (nonatomic, strong) UIButton *commentBtn;
+@property (nonatomic, strong) UILabel *commentCountLabel;
 
 @property (nonatomic, strong) UISlider *progress;
 @property (nonatomic, strong) UILabel *timeNow;
@@ -34,7 +40,9 @@
 @property (nonatomic, strong) UIButton *loopBtn;
 @property (nonatomic, strong) UIButton *listBtn;
 
-@property (nonatomic, strong) UIButton *fxBtn;
+@property (nonatomic, strong) UIButton *deviceBtn;
+@property (nonatomic, strong) UIButton *lightBtn;
+@property (nonatomic, strong) UIButton *infoBtn;
 @property (nonatomic, strong) UIButton *downloadBtn;
 @property (nonatomic, strong) UIButton *moreBtn;
 @property (nonatomic, strong) UIButton *translateBtn;
@@ -69,7 +77,10 @@
 
 - (UIButton *)iconButton:(NSString *)symbol size:(CGFloat)size action:(SEL)action {
     UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-    [b setImage:[UIImage systemImageNamed:symbol] forState:UIControlStateNormal];
+    UIImage *img = [UIImage systemImageNamed:symbol
+                           withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:size
+                                                                                               weight:UIImageSymbolWeightRegular]];
+    [b setImage:img forState:UIControlStateNormal];
     b.tintColor = NE_TEXT;
     b.imageView.contentMode = UIViewContentModeScaleAspectFit;
     [b addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
@@ -77,33 +88,41 @@
 }
 
 - (void)build {
-    _coverBlurBackdrop = [[UIImageView alloc] initWithFrame:CGRectZero];
-    _coverBlurBackdrop.contentMode = UIViewContentModeScaleAspectFill;
-    _coverBlurBackdrop.clipsToBounds = YES;
-    _coverBlurBackdrop.alpha = 0.30;
-    [self addSubview:_coverBlurBackdrop];
+    _coverBackdrop = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _coverBackdrop.contentMode = UIViewContentModeScaleAspectFill;
+    _coverBackdrop.clipsToBounds = YES;
+    _coverBackdrop.alpha = 0.55;
+    [self addSubview:_coverBackdrop];
 
     _coverBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
-    _coverBlur.alpha = 0.55;
+    _coverBlur.alpha = 0.42;
     _coverBlur.userInteractionEnabled = NO;
     [self addSubview:_coverBlur];
 
-    // 压暗背景，避免大图上的文字抢视觉
-    _dimView = [[UIView alloc] initWithFrame:CGRectZero];
-    _dimView.backgroundColor = NEColor(0x000000, 0.38);
-    _dimView.userInteractionEnabled = NO;
-    [self addSubview:_dimView];
+    _shade = [CAGradientLayer layer];
+    _shade.colors = @[(id)NEColor(0x000000, 0.12).CGColor,
+                      (id)NEColor(0x000000, 0.55).CGColor];
+    _shade.locations = @[@0.25, @1.0];
+    [self.layer addSublayer:_shade];
 
-    // 黑胶唱片
+    // ---------- 黑胶 ----------
     _vinylBox = [[UIView alloc] initWithFrame:CGRectZero];
-    [_vinylBox setUserInteractionEnabled:NO];
+    _vinylBox.userInteractionEnabled = NO;
     [self addSubview:_vinylBox];
 
     _discBase = [[UIView alloc] initWithFrame:CGRectZero];
-    _discBase.backgroundColor = NEColor(0x0B0B0B, 1.0);
-    _discBase.layer.borderWidth = 1;
-    _discBase.layer.borderColor = NEColor(0xFFFFFF, 0.08).CGColor;
+    _discBase.backgroundColor = NEColor(0x070707, 1.0);
+    _discBase.layer.shadowColor = UIColor.blackColor.CGColor;
+    _discBase.layer.shadowOpacity = 0.55;
+    _discBase.layer.shadowRadius = 26;
+    _discBase.layer.shadowOffset = CGSizeMake(0, 12);
     [_vinylBox addSubview:_discBase];
+
+    _discRing = [[UIView alloc] initWithFrame:CGRectZero];
+    _discRing.backgroundColor = UIColor.clearColor;
+    _discRing.layer.borderColor = NEColor(0xFFFFFF, 0.05).CGColor;
+    _discRing.layer.borderWidth = 1;
+    [_vinylBox addSubview:_discRing];
 
     _discCover = [[UIImageView alloc] initWithFrame:CGRectZero];
     _discCover.backgroundColor = NE_CARD;
@@ -112,21 +131,44 @@
     [_vinylBox addSubview:_discCover];
 
     _centerDot = [[UIView alloc] initWithFrame:CGRectZero];
-    _centerDot.backgroundColor = NEColor(0xF2F2F2, 0.9);
-    _centerDot.layer.cornerRadius = 3;
+    _centerDot.backgroundColor = NEColor(0xFFFFFF, 0.9);
     [_vinylBox addSubview:_centerDot];
 
-    _tonearm = [[UIView alloc] initWithFrame:CGRectZero];
-    _tonearm.backgroundColor = NEColor(0xEDEDED, 0.85);
-    _tonearm.layer.cornerRadius = 2;
-    [_vinylBox addSubview:_tonearm];
+    _armBox = [[UIView alloc] initWithFrame:CGRectZero];
+    _armBox.userInteractionEnabled = NO;
+    [_vinylBox addSubview:_armBox];
 
-    // 歌曲信息
+    _tonearm = [[UIView alloc] initWithFrame:CGRectZero];
+    _tonearm.backgroundColor = NEColor(0xF2F2F2, 0.92);
+    _tonearm.layer.cornerRadius = 1.5;
+    [_armBox addSubview:_tonearm];
+
+    _tonearmHead = [[UIView alloc] initWithFrame:CGRectZero];
+    _tonearmHead.backgroundColor = NEColor(0xFAFAFA, 0.96);
+    _tonearmHead.layer.cornerRadius = 5;
+    [_armBox addSubview:_tonearmHead];
+
+    // ---------- 歌曲信息 ----------
     _titleLabel = [UILabel new];
-    _titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    _titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightSemibold];
     _titleLabel.textColor = NE_TEXT;
     _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self addSubview:_titleLabel];
+
+    _artistLabel = [UILabel new];
+    _artistLabel.font = [UIFont systemFontOfSize:13];
+    _artistLabel.textColor = NEColor(0xFFFFFF, 0.62);
+    [self addSubview:_artistLabel];
+
+    _followBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    [_followBtn setTitle:@"关注" forState:UIControlStateNormal];
+    _followBtn.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+    [_followBtn setTitleColor:NEColor(0xFFFFFF, 0.75) forState:UIControlStateNormal];
+    _followBtn.layer.borderWidth = 1;
+    _followBtn.layer.borderColor = NEColor(0xFFFFFF, 0.35).CGColor;
+    _followBtn.layer.cornerRadius = 9;
+    [_followBtn addTarget:self action:@selector(followArtist) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:_followBtn];
 
     _vipBadge = [UILabel new];
     _vipBadge.text = @"VIP";
@@ -139,28 +181,33 @@
     _vipBadge.hidden = YES;
     [self addSubview:_vipBadge];
 
-    _artistLabel = [UILabel new];
-    _artistLabel.font = [UIFont systemFontOfSize:12];
-    _artistLabel.textColor = NE_TEXT_DIM;
-    [self addSubview:_artistLabel];
-
     _likeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    [_likeBtn setTitle:@"♡" forState:UIControlStateNormal];
-    [_likeBtn setTitleColor:NE_TEXT forState:UIControlStateNormal];
-    _likeBtn.titleLabel.font = [UIFont systemFontOfSize:20];
+    [_likeBtn setImage:[UIImage systemImageNamed:@"heart"] forState:UIControlStateNormal];
+    _likeBtn.tintColor = NEColor(0xFFFFFF, 0.85);
     [_likeBtn addTarget:self action:@selector(toggleLike) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_likeBtn];
 
+    _likeCountLabel = [UILabel new];
+    _likeCountLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _likeCountLabel.textColor = NEColor(0xFFFFFF, 0.7);
+    [self addSubview:_likeCountLabel];
+
     _commentBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    [_commentBtn setTitle:@"💬" forState:UIControlStateNormal];
-    _commentBtn.titleLabel.font = [UIFont systemFontOfSize:15];
+    [_commentBtn setImage:[UIImage systemImageNamed:@"bubble.left"] forState:UIControlStateNormal];
+    _commentBtn.tintColor = NEColor(0xFFFFFF, 0.85);
     [_commentBtn addTarget:self action:@selector(showComments) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_commentBtn];
 
-    // 进度
+    _commentCountLabel = [UILabel new];
+    _commentCountLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _commentCountLabel.textColor = NEColor(0xFFFFFF, 0.7);
+    [self addSubview:_commentCountLabel];
+
+    // ---------- 进度 ----------
     _progress = [[UISlider alloc] initWithFrame:CGRectZero];
-    _progress.minimumTrackTintColor = NE_BRAND;
-    _progress.maximumTrackTintColor = NEColor(0xFFFFFF, 0.18);
+    _progress.minimumTrackTintColor = NEColor(0xFFFFFF, 0.92);
+    _progress.maximumTrackTintColor = NEColor(0xFFFFFF, 0.22);
+    [_progress setThumbImage:[self dotImageWithSize:11 color:UIColor.whiteColor] forState:UIControlStateNormal];
     [_progress addTarget:self action:@selector(sliderTouchDown) forControlEvents:UIControlEventTouchDown];
     [_progress addTarget:self action:@selector(sliderChanged) forControlEvents:UIControlEventValueChanged];
     [_progress addTarget:self action:@selector(sliderTouchUp)
@@ -168,52 +215,62 @@
     [self addSubview:_progress];
 
     _timeNow = [UILabel new];
-    _timeNow.font = [UIFont monospacedDigitSystemFontOfSize:10 weight:UIFontWeightRegular];
-    _timeNow.textColor = NE_TEXT_DIM;
-    _timeNow.text = @"0:00";
+    _timeNow.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightRegular];
+    _timeNow.textColor = NEColor(0xFFFFFF, 0.55);
+    _timeNow.text = @"00:00";
     [self addSubview:_timeNow];
 
     _timeTotal = [UILabel new];
-    _timeTotal.font = [UIFont monospacedDigitSystemFontOfSize:10 weight:UIFontWeightRegular];
-    _timeTotal.textColor = NE_TEXT_DIM;
-    _timeTotal.text = @"0:00";
+    _timeTotal.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightRegular];
+    _timeTotal.textColor = NEColor(0xFFFFFF, 0.55);
+    _timeTotal.text = @"00:00";
     _timeTotal.textAlignment = NSTextAlignmentRight;
     [self addSubview:_timeTotal];
 
     _qualityLabel = [UILabel new];
     _qualityLabel.text = @"极高音质";
-    _qualityLabel.font = [UIFont systemFontOfSize:9];
-    _qualityLabel.textColor = NE_TEXT_DIM;
+    _qualityLabel.font = [UIFont systemFontOfSize:10];
+    _qualityLabel.textColor = NEColor(0xFFFFFF, 0.5);
     _qualityLabel.textAlignment = NSTextAlignmentCenter;
     [self addSubview:_qualityLabel];
 
-    // 控制
-    _loopBtn = [self iconButton:@"repeat" size:18 action:@selector(cycleLoop)];
+    // ---------- 控制 ----------
+    _loopBtn = [self iconButton:@"repeat" size:17 action:@selector(cycleLoop)];
     _prevBtn = [self iconButton:@"backward.end.fill" size:22 action:@selector(prev)];
-    _playBtn = [self iconButton:@"play.fill" size:28 action:@selector(toggle)];
+    _playBtn = [self iconButton:@"pause.fill" size:30 action:@selector(toggle)];
     _nextBtn = [self iconButton:@"forward.end.fill" size:22 action:@selector(next)];
-    _listBtn = [self iconButton:@"list.bullet" size:20 action:@selector(openPlaylist)];
+    _listBtn = [self iconButton:@"list.bullet" size:18 action:@selector(openPlaylist)];
     for (UIButton *b in @[_loopBtn, _prevBtn, _playBtn, _nextBtn, _listBtn]) [self addSubview:b];
 
-    // 辅助
-    _fxBtn = [self iconButton:@"waveform" size:16 action:@selector(notReady:)];
-    _downloadBtn = [self iconButton:@"arrow.down.circle" size:16 action:@selector(notReady:)];
-    _moreBtn = [self iconButton:@"ellipsis" size:16 action:@selector(showMore)];
+    // ---------- 底部工具 ----------
+    _deviceBtn   = [self iconButton:@"iphone" size:15 action:@selector(notReady:)];
+    _lightBtn    = [self iconButton:@"lightbulb" size:15 action:@selector(notReady:)];
+    _infoBtn     = [self iconButton:@"info.circle" size:15 action:@selector(notReady:)];
+    _downloadBtn = [self iconButton:@"arrow.down.circle" size:15 action:@selector(notReady:)];
+    _moreBtn     = [self iconButton:@"ellipsis" size:15 action:@selector(showMore)];
     _translateBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     [_translateBtn setTitle:@"译" forState:UIControlStateNormal];
-    _translateBtn.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-    [_translateBtn setTitleColor:NE_TEXT forState:UIControlStateNormal];
+    _translateBtn.titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
+    [_translateBtn setTitleColor:NEColor(0xFFFFFF, 0.8) forState:UIControlStateNormal];
     _translateBtn.layer.borderWidth = 1;
-    _translateBtn.layer.borderColor = NEColor(0xFFFFFF, 0.25).CGColor;
-    _translateBtn.layer.cornerRadius = 10;
+    _translateBtn.layer.borderColor = NEColor(0xFFFFFF, 0.35).CGColor;
+    _translateBtn.layer.cornerRadius = 9;
     [_translateBtn addTarget:self action:@selector(toggleTranslation) forControlEvents:UIControlEventTouchUpInside];
-    for (UIButton *b in @[_fxBtn, _downloadBtn, _moreBtn, _translateBtn]) [self addSubview:b];
+    for (UIButton *b in @[_deviceBtn, _lightBtn, _infoBtn, _downloadBtn, _moreBtn, _translateBtn]) [self addSubview:b];
 
-    // 歌词
+    // ---------- 歌词 ----------
     _lyricView = [[NELyricView alloc] initWithFrame:CGRectZero];
     _lyricView.delegate = self;
     _lyricView.showsTranslation = YES;
     [self addSubview:_lyricView];
+}
+
+- (UIImage *)dotImageWithSize:(CGFloat)size color:(UIColor *)color {
+    UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size)];
+    return [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [color setFill];
+        [[UIBezierPath bezierPathWithOvalInRect:CGRectMake(0, 0, size, size)] fill];
+    }];
 }
 
 #pragma mark - 布局
@@ -222,117 +279,135 @@
     [super layoutSubviews];
     CGFloat W = self.bounds.size.width;
     CGFloat H = self.bounds.size.height;
-    _coverBlurBackdrop.frame = self.bounds;
+    _coverBackdrop.frame = self.bounds;
     _coverBlur.frame = self.bounds;
-    _dimView.frame = self.bounds;
+    _shade.frame = self.bounds;
 
     BOOL wide = (W >= 620);
-    CGFloat margin = wide ? 32.0 : 16.0;
-    CGFloat bottomBarH = 36.0;
-    CGFloat bottomY = H - bottomBarH;
+    CGFloat margin = wide ? 30.0 : 20.0;
+    CGFloat bottomBarH = 40.0;
 
-    // 底部工具排
-    _fxBtn.frame       = CGRectMake(margin, bottomY, 26, 22);
-    _downloadBtn.frame = CGRectMake(margin + 42, bottomY, 26, 22);
-    _moreBtn.frame     = CGRectMake(margin + 84, bottomY, 26, 22);
-    _translateBtn.frame = CGRectMake(W - margin - 28, bottomY - 1, 28, 20);
+    // 底部工具
+    CGFloat by = H - bottomBarH;
+    CGFloat bx = margin;
+    for (UIButton *b in @[_deviceBtn, _lightBtn, _infoBtn, _downloadBtn, _moreBtn]) {
+        b.frame = CGRectMake(bx, by + 8, 24, 24);
+        bx += 40;
+    }
+    _translateBtn.frame = CGRectMake(W - margin - 26, by + 10, 26, 20);
 
     if (wide) {
-        CGFloat leftW = MIN(MAX(W * 0.44, 320), 470);
+        CGFloat leftW = MIN(MAX(W * 0.46, 320), 520);
         CGFloat availH = H - margin * 2 - bottomBarH;
-        CGFloat discSize = MIN(leftW - 72, availH * 0.46);
-        discSize = MIN(MAX(discSize, 120), 340);
+        CGFloat disc = MIN(leftW - 96, availH * 0.46);
+        disc = MIN(MAX(disc, 120), 340);
 
-        CGFloat groupH = discSize + 20 + 22 + 22 + 50 + 18 + 56;
+        CGFloat infoH = 22 + 22 + 30 + 18 + 60;
+        CGFloat groupH = disc + 24 + infoH;
         CGFloat topY = MAX(margin, (H - bottomBarH - groupH) / 2);
 
-        CGFloat discX = margin + (leftW - discSize - 20) / 2;
-        _vinylBox.frame = CGRectMake(discX, topY, discSize + 20, discSize + 20);
-        _discBase.frame = CGRectMake(10, 10, discSize, discSize);
-        _discBase.layer.cornerRadius = discSize / 2;
-        _discCover.frame = CGRectMake(10 + discSize * 0.18, 10 + discSize * 0.18,
-                                      discSize * 0.64, discSize * 0.64);
-        _discCover.layer.cornerRadius = discSize * 0.32;
-        _centerDot.frame = CGRectMake(10 + discSize / 2 - 3, 10 + discSize / 2 - 3, 6, 6);
-        _tonearm.frame = CGRectMake(10 + discSize * 0.72, 0, 4, discSize * 0.45);
-        _tonearm.transform = CGAffineTransformMakeRotation(M_PI / 9);
+        CGFloat discX = margin + (leftW - disc) / 2;
+        [self placeVinylAt:CGPointMake(discX, topY) size:disc];
 
-        CGFloat infoY = topY + discSize + 24;
+        CGFloat infoY = topY + disc + 26;
         _titleLabel.textAlignment = NSTextAlignmentLeft;
-        _titleLabel.frame = CGRectMake(margin, infoY, leftW - 130, 22);
-        _artistLabel.textAlignment = NSTextAlignmentLeft;
-        _artistLabel.frame = CGRectMake(margin, infoY + 23, leftW - 130, 16);
-        _vipBadge.frame = CGRectMake(MIN(CGRectGetMaxX(_titleLabel.frame) + 4, margin + leftW - 164),
-                                     infoY + 5, 26, 13);
-        _likeBtn.frame = CGRectMake(margin + leftW - 96, infoY - 2, 62, 26);
-        _commentBtn.frame = CGRectMake(margin + leftW - 30, infoY + 1, 26, 24);
+        _titleLabel.frame = CGRectMake(margin, infoY, leftW - 150, 26);
+        _artistLabel.frame = CGRectMake(margin, infoY + 30, leftW - 210, 16);
+        _vipBadge.frame = CGRectMake(CGRectGetMaxX(_artistLabel.frame) + 4, infoY + 32, 26, 13);
+        _followBtn.frame = CGRectMake(MIN(CGRectGetMaxX(_artistLabel.frame) + 30, margin + leftW - 220),
+                                      infoY + 31, 46, 18);
 
-        CGFloat barY = infoY + 50;
+        CGFloat likeX = margin + leftW - 120;
+        _likeBtn.frame = CGRectMake(likeX, infoY + 2, 22, 22);
+        _likeCountLabel.frame = CGRectMake(likeX + 24, infoY + 4, 52, 18);
+        CGFloat cmtX = margin + leftW - 56;
+        _commentBtn.frame = CGRectMake(cmtX, infoY + 2, 22, 22);
+        _commentCountLabel.hidden = NO;
+        _commentCountLabel.frame = CGRectMake(cmtX + 24, infoY + 4, 46, 18);
+
+        CGFloat barY = infoY + 58;
         _progress.frame = CGRectMake(margin, barY, leftW - 28, 18);
-        _timeNow.frame = CGRectMake(margin, barY + 20, 40, 12);
-        _timeTotal.frame = CGRectMake(margin + leftW - 28 - 40, barY + 20, 40, 12);
-        _qualityLabel.frame = CGRectMake(margin + (leftW - 28) / 2 - 40, barY - 2, 80, 12);
+        _timeNow.frame = CGRectMake(margin, barY + 22, 50, 13);
+        _timeTotal.frame = CGRectMake(margin + leftW - 28 - 50, barY + 22, 50, 13);
+        _qualityLabel.frame = CGRectMake(margin + (leftW - 28) / 2 - 40, barY + 4, 80, 12);
 
-        CGFloat cy = barY + 58;
+        CGFloat cy = barY + 66;
         CGFloat cx = margin + (leftW - 28) / 2;
-        _loopBtn.frame = CGRectMake(margin, cy - 12, 30, 24);
-        _prevBtn.frame = CGRectMake(cx - 72, cy - 15, 34, 30);
-        _playBtn.frame = CGRectMake(cx - 17, cy - 20, 34, 40);
-        _nextBtn.frame = CGRectMake(cx + 38, cy - 15, 34, 30);
-        _listBtn.frame = CGRectMake(margin + leftW - 30, cy - 12, 30, 24);
+        _loopBtn.frame = CGRectMake(margin, cy - 12, 28, 24);
+        _prevBtn.frame = CGRectMake(cx - 84, cy - 15, 30, 30);
+        _playBtn.frame = CGRectMake(cx - 21, cy - 21, 42, 42);
+        _nextBtn.frame = CGRectMake(cx + 54, cy - 15, 30, 30);
+        _listBtn.frame = CGRectMake(margin + leftW - 30, cy - 12, 28, 24);
 
-        CGFloat lyricX = margin + leftW + 20;
+        CGFloat lyricX = margin + leftW + 22;
         CGFloat lyricW = W - lyricX - margin;
         _lyricView.hidden = NO;
-        _lyricView.frame = CGRectMake(lyricX, margin, MAX(120, lyricW), H - margin * 2 - bottomBarH);
+        _lyricView.frame = CGRectMake(lyricX, margin, MAX(140, lyricW), H - margin * 2 - bottomBarH);
     } else {
-        CGFloat discSize = MIN(W * 0.52, H * 0.30);
-        discSize = MIN(MAX(discSize, 96), 220);
-        CGFloat groupH = discSize + 20 + 20 + 16 + 12 + 44 + 16 + 48;
-        CGFloat topY = MAX(8, (H - bottomBarH - groupH) / 2 - 8);
-        CGFloat cx2 = W / 2;
+        CGFloat disc = MIN(W * 0.56, H * 0.34);
+        disc = MIN(MAX(disc, 100), 250);
+        CGFloat infoH = 22 + 22 + 20 + 34 + 16 + 52;
+        CGFloat groupH = disc + 22 + infoH;
+        CGFloat topY = MAX(14, (H - bottomBarH - groupH) / 2 - 6);
+        CGFloat discX = (W - disc) / 2;
+        [self placeVinylAt:CGPointMake(discX, topY) size:disc];
 
-        _vinylBox.frame = CGRectMake(cx2 - discSize / 2 - 10, topY, discSize + 20, discSize + 20);
-        _discBase.frame = CGRectMake(10, 10, discSize, discSize);
-        _discBase.layer.cornerRadius = discSize / 2;
-        _discCover.frame = CGRectMake(10 + discSize * 0.18, 10 + discSize * 0.18,
-                                      discSize * 0.64, discSize * 0.64);
-        _discCover.layer.cornerRadius = discSize * 0.32;
-        _centerDot.frame = CGRectMake(10 + discSize / 2 - 3, 10 + discSize / 2 - 3, 6, 6);
-        _tonearm.frame = CGRectMake(10 + discSize * 0.72, 0, 3, discSize * 0.42);
-        _tonearm.transform = CGAffineTransformMakeRotation(M_PI / 9);
-
-        CGFloat infoY = topY + discSize + 18;
+        CGFloat infoY = topY + disc + 22;
+        CGFloat cx = W / 2;
         _titleLabel.textAlignment = NSTextAlignmentCenter;
-        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2 - 70, 20);
+        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2, 24);
         _artistLabel.textAlignment = NSTextAlignmentCenter;
-        _artistLabel.frame = CGRectMake(margin, infoY + 21, W - margin * 2 - 70, 14);
-        _vipBadge.frame = CGRectMake(W - margin - 30, infoY + 4, 26, 13);
-        _likeBtn.frame = CGRectMake(W - margin - 96, infoY - 2, 62, 24);
-        _commentBtn.frame = CGRectMake(W - margin - 30, infoY + 1, 24, 22);
+        _artistLabel.frame = CGRectMake(margin, infoY + 28, W - margin * 2 - 80, 15);
+        _vipBadge.frame = CGRectMake(W - margin - 30, infoY + 30, 26, 13);
+        _followBtn.frame = CGRectMake(cx + 30, infoY + 28, 46, 18);
 
-        CGFloat barY = infoY + 44;
-        _progress.frame = CGRectMake(margin, barY, W - margin * 2, 16);
-        _timeNow.frame = CGRectMake(margin, barY + 16, 40, 11);
-        _timeTotal.frame = CGRectMake(W - margin - 40, barY + 16, 40, 11);
-        _qualityLabel.frame = CGRectMake(cx2 - 40, barY, 80, 11);
+        _likeBtn.frame = CGRectMake(W - margin - 96, infoY + 2, 22, 22);
+        _likeCountLabel.frame = CGRectMake(W - margin - 72, infoY + 4, 60, 18);
+        _commentBtn.frame = CGRectMake(W - margin - 22, infoY + 2, 22, 22);
+        _commentCountLabel.hidden = YES;
 
-        CGFloat cy = barY + 50;
-        _loopBtn.frame = CGRectMake(margin, cy - 12, 28, 24);
-        _prevBtn.frame = CGRectMake(cx2 - 68, cy - 14, 32, 28);
-        _playBtn.frame = CGRectMake(cx2 - 16, cy - 19, 32, 38);
-        _nextBtn.frame = CGRectMake(cx2 + 36, cy - 14, 32, 28);
-        _listBtn.frame = CGRectMake(W - margin - 28, cy - 12, 28, 24);
+        CGFloat barY = infoY + 50;
+        _progress.frame = CGRectMake(margin, barY, W - margin * 2, 18);
+        _timeNow.frame = CGRectMake(margin, barY + 20, 50, 12);
+        _timeTotal.frame = CGRectMake(W - margin - 50, barY + 20, 50, 12);
+        _qualityLabel.frame = CGRectMake(cx - 40, barY + 2, 80, 12);
+
+        CGFloat cy = barY + 58;
+        _loopBtn.frame = CGRectMake(margin, cy - 12, 26, 24);
+        _prevBtn.frame = CGRectMake(cx - 74, cy - 14, 28, 28);
+        _playBtn.frame = CGRectMake(cx - 19, cy - 19, 38, 38);
+        _nextBtn.frame = CGRectMake(cx + 46, cy - 14, 28, 28);
+        _listBtn.frame = CGRectMake(W - margin - 26, cy - 12, 26, 24);
 
         CGFloat lyricTop = cy + 26;
         CGFloat lyricH = H - lyricTop - bottomBarH - 6;
-        _lyricView.hidden = (lyricH < 36);
-        if (!_lyricView.hidden) {
-            _lyricView.frame = CGRectMake(0, lyricTop, W, lyricH);
-        } else {
-            _lyricView.frame = CGRectMake(0, lyricTop, W, 0);
-        }
+        _lyricView.hidden = (lyricH < 40);
+        _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(0, lyricH));
     }
+}
+
+- (void)placeVinylAt:(CGPoint)origin size:(CGFloat)size {
+    _vinylBox.frame = CGRectMake(origin.x, origin.y, size, size);
+    _discBase.frame = CGRectMake(0, 0, size, size);
+    _discBase.layer.cornerRadius = size / 2;
+
+    CGFloat ring = size * 0.86;
+    _discRing.frame = CGRectMake((size - ring) / 2, (size - ring) / 2, ring, ring);
+    _discRing.layer.cornerRadius = ring / 2;
+
+    CGFloat cover = size * 0.62;
+    _discCover.frame = CGRectMake((size - cover) / 2, (size - cover) / 2, cover, cover);
+    _discCover.layer.cornerRadius = cover / 2;
+
+    _centerDot.frame = CGRectMake(size / 2 - 2.5, size / 2 - 2.5, 5, 5);
+    _centerDot.layer.cornerRadius = 2.5;
+
+    CGFloat armW = size * 0.58;
+    _armBox.frame = CGRectMake(size * 0.30, -size * 0.06, armW, 20);
+    _armBox.transform = CGAffineTransformMakeRotation(M_PI / 10);
+    _tonearm.frame = CGRectMake(0, 8, armW, 3);
+    _tonearmHead.frame = CGRectMake(armW - 8, 2, 12, 12);
+    _tonearmHead.layer.cornerRadius = 6;
 }
 
 #pragma mark - 通知
@@ -344,9 +419,7 @@
     [nc addObserver:self selector:@selector(onProgress) name:NEPlayerProgressNotification object:nil];
 }
 
-- (void)onState {
-    [self refresh];
-}
+- (void)onState { [self refresh]; }
 
 - (void)onTrack {
     self.likedSongID = nil;
@@ -356,19 +429,6 @@
     [self loadCommentCount];
     [self loadLikeState];
     [self refresh];
-}
-
-- (void)loadLikeState {
-    NESong *song = [NEPlayer shared].currentSong;
-    if (!song.songID.length || ![[NEApi shared] isLoggedIn]) return;
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] fetchSongLikeState:song.songID complete:^(NSInteger count, BOOL liked, NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || error) return;
-        self.likeCount = count;
-        if (liked) self.likedSongID = song.songID;
-        [self updateLikeButton];
-    }];
 }
 
 - (void)onProgress {
@@ -396,18 +456,10 @@
     _vipBadge.hidden = !song.vipOnly;
 
     BOOL playing = p.isPlaying;
-    [_playBtn setImage:[UIImage systemImageNamed:(playing ? @"pause.fill" : @"play.fill")]
-              forState:UIControlStateNormal];
-
+    [_playBtn setImage:[UIImage systemImageNamed:(playing ? @"pause.fill" : @"play.fill")] forState:UIControlStateNormal];
     [self updateLoopIcon];
     [self updateLikeButton];
-
-    if (self.commentTotal > 0) {
-        [_commentBtn setTitle:[NSString stringWithFormat:@"💬 %ld", (long)self.commentTotal]
-                     forState:UIControlStateNormal];
-    } else {
-        [_commentBtn setTitle:@"💬" forState:UIControlStateNormal];
-    }
+    [self updateCommentCount];
 
     _progress.maximumValue = MAX(1.0, p.duration);
     if (!self.userSeeking) {
@@ -434,19 +486,22 @@
 
 - (NSString *)formatCount:(NSInteger)n {
     if (n <= 0) return @"";
-    if (n >= 10000) return [NSString stringWithFormat:@"%.1f万", n / 10000.0];
+    if (n >= 1000000) return [NSString stringWithFormat:@"%ldw+", (long)(n / 10000)];
+    if (n >= 10000) return [NSString stringWithFormat:@"%.1fw", n / 10000.0];
     return [NSString stringWithFormat:@"%ld", (long)n];
 }
 
 - (void)updateLikeButton {
     BOOL liked = self.likedSongID.length &&
         [self.likedSongID isEqualToString:[NEPlayer shared].currentSong.songID];
-    NSString *count = [self formatCount:self.likeCount];
-    NSString *title = liked ? @"♥" : @"♡";
-    if (count.length) title = [title stringByAppendingFormat:@" %@", count];
-    [_likeBtn setTitle:title forState:UIControlStateNormal];
-    [_likeBtn setTitleColor:(liked ? NE_BRAND : NE_TEXT) forState:UIControlStateNormal];
-    _likeBtn.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    [_likeBtn setImage:[UIImage systemImageNamed:(liked ? @"heart.fill" : @"heart")]
+              forState:UIControlStateNormal];
+    _likeBtn.tintColor = liked ? NEColor(0xFA3B3B, 1.0) : NEColor(0xFFFFFF, 0.85);
+    _likeCountLabel.text = [self formatCount:self.likeCount];
+}
+
+- (void)updateCommentCount {
+    _commentCountLabel.text = [self formatCount:self.commentTotal];
 }
 
 #pragma mark - 黑胶旋转
@@ -457,7 +512,7 @@
     CABasicAnimation *spin = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
     spin.fromValue = @(0);
     spin.toValue = @(M_PI * 2);
-    spin.duration = 24;
+    spin.duration = 26;
     spin.repeatCount = HUGE_VALF;
     spin.removedOnCompletion = NO;
     [_discCover.layer addAnimation:spin forKey:@"spin"];
@@ -494,7 +549,7 @@
     NSString *url = song.coverURL;
     if (!url.length) {
         _discCover.image = nil;
-        _coverBlurBackdrop.image = nil;
+        _coverBackdrop.image = nil;
         return;
     }
     if ([self.coverURLString isEqualToString:url] && _discCover.image) return;
@@ -514,7 +569,7 @@
 
 - (void)applyCover:(UIImage *)img {
     _discCover.image = img;
-    _coverBlurBackdrop.image = img;
+    _coverBackdrop.image = img;
 }
 
 #pragma mark - 操作
@@ -556,10 +611,14 @@
     if (host) [host presentViewController:sheet animated:YES completion:nil];
 }
 
+- (void)followArtist {
+    [self presentAlert:@"关注歌手" message:@"歌手页还没接，先用搜索找 TA 的歌"];
+}
+
 - (void)toggleTranslation {
     self.showsTranslation = !self.showsTranslation;
     self.lyricView.showsTranslation = self.showsTranslation;
-    [_translateBtn setTitleColor:(self.showsTranslation ? NE_TEXT : NE_TEXT_DIM)
+    [_translateBtn setTitleColor:(self.showsTranslation ? NEColor(0xFFFFFF, 0.85) : NEColor(0xFFFFFF, 0.35))
                         forState:UIControlStateNormal];
 }
 
@@ -594,6 +653,19 @@
 
 #pragma mark - 喜欢 / 评论
 
+- (void)loadLikeState {
+    NESong *song = [NEPlayer shared].currentSong;
+    if (!song.songID.length || ![[NEApi shared] isLoggedIn]) return;
+    __weak typeof(self) weakSelf = self;
+    [[NEApi shared] fetchSongLikeState:song.songID complete:^(NSInteger count, BOOL liked, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || error) return;
+        self.likeCount = count;
+        if (liked) self.likedSongID = song.songID;
+        [self updateLikeButton];
+    }];
+}
+
 - (void)toggleLike {
     NESong *song = [NEPlayer shared].currentSong;
     if (!song.songID.length) return;
@@ -625,7 +697,7 @@
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.commentTotal = total;
-        [self refresh];
+        [self updateCommentCount];
     }];
 }
 
@@ -696,7 +768,7 @@
 - (NSString *)formatTime:(double)s {
     if (!isfinite(s) || s < 0) s = 0;
     int total = (int)lround(s);
-    return [NSString stringWithFormat:@"%d:%02d", total / 60, total % 60];
+    return [NSString stringWithFormat:@"%02d:%02d", total / 60, total % 60];
 }
 
 - (UIViewController *)topMostVC {
