@@ -164,7 +164,6 @@
 @property (nonatomic, assign) CGFloat lastLayoutWidth;
 @property (nonatomic, assign) CGFloat lastLayoutHeight;
 @property (nonatomic, assign) BOOL layoutDone;
-@property (nonatomic, assign, readwrite) CGFloat fontScale;
 @end
 
 @implementation NELyricView
