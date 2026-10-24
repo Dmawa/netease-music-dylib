@@ -21,6 +21,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) BOOL showsTranslation;
 /// 是否正在播放：开启后用 CADisplayLink 做 60fps 时间插值
 @property (nonatomic, assign) BOOL playing;
+/// 字号缩放（默认 1.0），让歌词随窗口大小自适应
+@property (nonatomic, assign) CGFloat fontScale;
 
 - (void)reload;
 

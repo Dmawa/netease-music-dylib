@@ -3,5 +3,5 @@
 #import <Foundation/Foundation.h>
 
 #define NE_APP_NAME    @"NEMusic 悬浮播放器"
-#define NE_APP_VERSION @"0.6.10"
+#define NE_APP_VERSION @"0.6.11"
 #define NE_APP_AUTHOR  @"Dmawa"

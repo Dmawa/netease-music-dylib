@@ -164,6 +164,7 @@
 @property (nonatomic, assign) CGFloat lastLayoutWidth;
 @property (nonatomic, assign) CGFloat lastLayoutHeight;
 @property (nonatomic, assign) BOOL layoutDone;
+@property (nonatomic, assign, readwrite) CGFloat fontScale;
 @end
 
 @implementation NELyricView
@@ -174,6 +175,7 @@
         _currentIndex = -1;
         _scrolledIndex = -1;
         _lineViews = [NSMutableArray array];
+        _fontScale = 1.0;
 
         _scroll = [[UIScrollView alloc] initWithFrame:self.bounds];
         _scroll.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -261,9 +263,18 @@
 #pragma mark - 布局（只在尺寸变化时做一次）
 
 - (CGFloat)fontSizeForWidth:(CGFloat)w {
-    if (w >= 560) return 20;
-    if (w >= 380) return 16;
-    return 15;
+    CGFloat base = 15;
+    if (w >= 560) base = 20;
+    else if (w >= 380) base = 16;
+    CGFloat s = self.fontScale > 0.01 ? self.fontScale : 1.0;
+    return MIN(MAX(base * s, 12.0), 46.0);
+}
+
+- (void)setFontScale:(CGFloat)fontScale {
+    if (fabs(_fontScale - fontScale) < 0.01) return;
+    _fontScale = fontScale;
+    self.layoutDone = NO;
+    [self setNeedsLayout];
 }
 
 - (void)layoutSubviews {

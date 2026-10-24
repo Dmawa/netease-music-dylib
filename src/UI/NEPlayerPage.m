@@ -53,6 +53,7 @@
 @property (nonatomic, assign) BOOL showsTranslation;
 @property (nonatomic, assign) BOOL userSeeking;
 @property (nonatomic, assign) BOOL spinning;
+@property (nonatomic, assign) CGFloat lastScale;
 @property (nonatomic, copy) NSString *loadedSongID;
 @property (nonatomic, copy) NSString *coverURLString;
 @property (nonatomic, copy) NSString *likedSongID;
@@ -267,6 +268,46 @@
     [self addSubview:_lyricView];
 }
 
+- (void)setIcon:(NSString *)symbol for:(UIButton *)button size:(CGFloat)size {
+    UIImage *img = [UIImage systemImageNamed:symbol
+                           withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:size
+                                                                                               weight:UIImageSymbolWeightRegular]];
+    [button setImage:img forState:UIControlStateNormal];
+}
+
+- (CGFloat)uiScale {
+    CGFloat s = MIN(self.bounds.size.width / 1000.0, self.bounds.size.height / 760.0);
+    return MIN(MAX(s, 0.85), 1.45);
+}
+
+- (void)applyUIScale:(CGFloat)s {
+    _titleLabel.font = [UIFont systemFontOfSize:26 * s weight:UIFontWeightSemibold];
+    _artistLabel.font = [UIFont systemFontOfSize:15 * s];
+    _followBtn.titleLabel.font = [UIFont systemFontOfSize:10 * s weight:UIFontWeightMedium];
+    _likeCountLabel.font = [UIFont systemFontOfSize:12 * s weight:UIFontWeightMedium];
+    _commentCountLabel.font = _likeCountLabel.font;
+    _timeNow.font = [UIFont monospacedDigitSystemFontOfSize:11 * s weight:UIFontWeightRegular];
+    _timeTotal.font = _timeNow.font;
+    _qualityLabel.font = [UIFont systemFontOfSize:10 * s];
+    _translateBtn.titleLabel.font = [UIFont systemFontOfSize:11 * s weight:UIFontWeightSemibold];
+
+    if (fabs(s - self.lastScale) < 0.02) return;
+    self.lastScale = s;
+    [self setIcon:@"repeat" for:_loopBtn size:15 * s];
+    [self setIcon:@"backward.end.fill" for:_prevBtn size:20 * s];
+    [self setIcon:@"pause.fill" for:_playBtn size:30 * s];
+    [self setIcon:@"forward.end.fill" for:_nextBtn size:20 * s];
+    [self setIcon:@"list.bullet" for:_listBtn size:15 * s];
+    [self setIcon:@"iphone" for:_deviceBtn size:15 * s];
+    [self setIcon:@"lightbulb" for:_lightBtn size:15 * s];
+    [self setIcon:@"info.circle" for:_infoBtn size:15 * s];
+    [self setIcon:@"arrow.down.circle" for:_downloadBtn size:15 * s];
+    [self setIcon:@"ellipsis" for:_moreBtn size:15 * s];
+    [_progress setThumbImage:[self dotImageWithSize:11 * s color:UIColor.whiteColor]
+                    forState:UIControlStateNormal];
+    _lyricView.fontScale = s;
+}
+
 - (UIImage *)dotImageWithSize:(CGFloat)size color:(UIColor *)color {
     UIGraphicsImageRenderer *r = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(size, size)];
     return [r imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
@@ -281,23 +322,29 @@
     [super layoutSubviews];
     CGFloat W = self.bounds.size.width;
     CGFloat H = self.bounds.size.height;
+    CGFloat s = [self uiScale];
+    [self applyUIScale:s];
+
     _coverBackdrop.frame = self.bounds;
     _coverBlur.frame = self.bounds;
     _shade.frame = self.bounds;
 
     BOOL wide = (W >= 620);
-    CGFloat margin = wide ? 30.0 : 20.0;
-    CGFloat bottomBarH = 40.0;
+    CGFloat margin = (wide ? 30.0 : 20.0);
+    CGFloat bottomBarH = 36.0 * s;
 
-    // 底部工具
+    // 底部工具（随字号缩放）
     CGFloat by = H - bottomBarH;
     CGFloat bx = margin;
-    CGFloat bottomGap = wide ? 44 : 36;
+    CGFloat bottomGap = (wide ? 44.0 : 36.0) * s;
+    CGFloat iconBox = 24.0 * s;
     for (UIButton *b in @[_deviceBtn, _lightBtn, _infoBtn, _downloadBtn, _moreBtn]) {
-        b.frame = CGRectMake(bx, by + 8, 24, 24);
+        b.frame = CGRectMake(bx, by + (bottomBarH - iconBox) / 2, iconBox, iconBox);
         bx += bottomGap;
     }
-    _translateBtn.frame = CGRectMake(W - margin - 26, by + 10, 26, 20);
+    CGFloat tw = 26.0 * s, th = 20.0 * s;
+    _translateBtn.frame = CGRectMake(W - margin - tw, by + (bottomBarH - th) / 2, tw, th);
+    _translateBtn.layer.cornerRadius = th / 2;
 
     if (wide) {
         CGFloat leftW = MIN(MAX(W * 0.52, 360), 680);
@@ -306,40 +353,44 @@
         disc = MIN(MAX(disc, 140), 480);
 
         CGFloat infoW = leftW * 0.80;
-        CGFloat infoH = 30 + 26 + 44 + 56 + 66;
-        CGFloat groupH = disc + 30 + infoH;
+        CGFloat titleH = 30 * s, gap1 = 6 * s, artistH = 18 * s, gap2 = 14 * s;
+        CGFloat barH = 20 * s, gap3 = 22 * s, timeH = 14 * s, gap4 = 30 * s, ctrlH = 48 * s;
+        CGFloat infoH = titleH + gap1 + artistH + gap2 + barH + gap3 + timeH + gap4 + ctrlH;
+        CGFloat groupH = disc + 30 * s + infoH;
         CGFloat topY = MAX(margin, (H - bottomBarH - groupH) / 2);
 
         CGFloat discX = margin + (leftW - disc) / 2 - leftW * 0.05;
         [self placeVinylAt:CGPointMake(discX, topY) size:disc];
 
-        CGFloat infoY = topY + disc + 30;
+        CGFloat infoY = topY + disc + 30 * s;
         _titleLabel.textAlignment = NSTextAlignmentLeft;
-        _titleLabel.frame = CGRectMake(margin, infoY, infoW - 10, 30);
+        _titleLabel.frame = CGRectMake(margin, infoY, infoW - 10, titleH);
         _artistLabel.textAlignment = NSTextAlignmentLeft;
-        _artistLabel.frame = CGRectMake(margin, infoY + 36, infoW - 160, 18);
+        _artistLabel.frame = CGRectMake(margin, infoY + titleH + gap1, infoW - 160 * s, artistH);
         _vipBadge.frame = CGRectMake(0, 0, 0, 0);
-        _followBtn.frame = CGRectMake(MIN(CGRectGetMaxX(_artistLabel.frame) + 26, margin + infoW - 168),
-                                      infoY + 37, 48, 20);
+        _followBtn.frame = CGRectMake(MIN(CGRectGetMaxX(_artistLabel.frame) + 26 * s, margin + infoW - 170 * s),
+                                      infoY + titleH + gap1 + (artistH - 20 * s) / 2, 48 * s, 20 * s);
+        _followBtn.layer.cornerRadius = 10 * s;
 
-        CGFloat likeX = margin + infoW - 160;
-        _likeBtn.frame = CGRectMake(likeX, infoY + 8, 24, 24);
-        _likeCountLabel.frame = CGRectMake(likeX + 27, infoY + 10, 60, 20);
-        CGFloat cmtX = margin + infoW - 44;
-        _commentBtn.frame = CGRectMake(cmtX, infoY + 8, 24, 24);
+        CGFloat likeS = 24 * s;
+        CGFloat likeX = margin + infoW - 160 * s;
+        _likeBtn.frame = CGRectMake(likeX, infoY + 8 * s, likeS, likeS);
+        _likeCountLabel.frame = CGRectMake(likeX + 27 * s, infoY + 10 * s, 64 * s, 20 * s);
+        CGFloat cmtX = margin + infoW - 44 * s;
+        _commentBtn.frame = CGRectMake(cmtX, infoY + 8 * s, likeS, likeS);
         _commentCountLabel.hidden = NO;
-        _commentCountLabel.frame = CGRectMake(cmtX + 27, infoY + 10, 44, 20);
+        _commentCountLabel.frame = CGRectMake(cmtX + 27 * s, infoY + 10 * s, 52 * s, 20 * s);
 
-        CGFloat barY = infoY + 68;
-        _progress.frame = CGRectMake(margin, barY, infoW - 10, 20);
-        _timeNow.frame = CGRectMake(margin, barY + 24, 50, 14);
-        _timeTotal.frame = CGRectMake(margin + infoW - 10 - 50, barY + 24, 50, 14);
-        _qualityLabel.frame = CGRectMake(margin + (infoW - 10) / 2 - 40, barY + 6, 80, 13);
+        CGFloat barY = infoY + titleH + gap1 + artistH + gap2;
+        _progress.frame = CGRectMake(margin, barY, infoW - 10, barH);
+        _timeNow.frame = CGRectMake(margin, barY + barH + gap3, 52 * s, timeH);
+        _timeTotal.frame = CGRectMake(margin + infoW - 10 - 52 * s, barY + barH + gap3, 52 * s, timeH);
+        _qualityLabel.frame = CGRectMake(margin + (infoW - 10) / 2 - 44 * s, barY + (barH - 13 * s) / 2, 88 * s, 13 * s);
 
-        CGFloat cy = barY + 72;
+        CGFloat cy = barY + barH + gap3 + timeH + gap4;
         CGFloat cx = margin + (infoW - 10) / 2;
-        CGFloat gap = 40;
-        CGFloat loopS = 30, navS = 32, playS = 48, listS = 30;
+        CGFloat gap = 40 * s;
+        CGFloat loopS = 30 * s, navS = 32 * s, playS = 48 * s, listS = 30 * s;
         CGFloat clusterW = loopS + navS + playS + navS + listS + gap * 4;
         CGFloat sx = cx - clusterW / 2;
         _loopBtn.frame = CGRectMake(sx, cy - loopS / 2, loopS, loopS);
@@ -353,47 +404,50 @@
         _lyricView.hidden = NO;
         _lyricView.frame = CGRectMake(lyricX, margin, MAX(160, lyricW), H - margin * 2 - bottomBarH);
     } else {
-        CGFloat disc = MIN(W * 0.56, H * 0.34);
+        CGFloat disc = MIN(W * 0.56, H * 0.32);
         disc = MIN(MAX(disc, 100), 250);
-        CGFloat infoH = 22 + 22 + 20 + 34 + 16 + 52;
-        CGFloat groupH = disc + 22 + infoH;
-        CGFloat topY = MAX(14, (H - bottomBarH - groupH) / 2 - 6);
+        CGFloat titleH = 26 * s, gap1 = 4 * s, artistH = 16 * s, gap2 = 12 * s;
+        CGFloat barH = 18 * s, gap3 = 18 * s, timeH = 13 * s, gap4 = 24 * s, ctrlH = 44 * s;
+        CGFloat infoH = titleH + gap1 + artistH + gap2 + barH + gap3 + timeH + gap4 + ctrlH;
+        CGFloat groupH = disc + 20 * s + infoH;
+        CGFloat topY = MAX(10, (H - bottomBarH - groupH) / 2 - 6);
         CGFloat discX = (W - disc) / 2;
         [self placeVinylAt:CGPointMake(discX, topY) size:disc];
 
-        CGFloat infoY = topY + disc + 22;
-        CGFloat cx = W / 2;
+        CGFloat infoY = topY + disc + 20 * s;
         _titleLabel.textAlignment = NSTextAlignmentCenter;
-        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2, 24);
+        _titleLabel.frame = CGRectMake(margin, infoY, W - margin * 2, titleH);
         _artistLabel.textAlignment = NSTextAlignmentCenter;
-        _artistLabel.frame = CGRectMake(margin, infoY + 28, W - margin * 2 - 80, 15);
-        _vipBadge.frame = CGRectMake(W - margin - 30, infoY + 30, 26, 13);
-        _followBtn.frame = CGRectMake(cx + 30, infoY + 28, 46, 18);
+        _artistLabel.frame = CGRectMake(margin, infoY + titleH + gap1, W - margin * 2 - 80 * s, artistH);
+        _vipBadge.frame = CGRectMake(W - margin - 30 * s, infoY + titleH + gap1, 26 * s, 13 * s);
+        _followBtn.frame = CGRectMake(W / 2 + 30 * s, infoY + titleH + gap1 + (artistH - 20 * s) / 2, 48 * s, 20 * s);
+        _followBtn.layer.cornerRadius = 10 * s;
 
-        _likeBtn.frame = CGRectMake(W - margin - 96, infoY + 2, 22, 22);
-        _likeCountLabel.frame = CGRectMake(W - margin - 72, infoY + 4, 60, 18);
-        _commentBtn.frame = CGRectMake(W - margin - 22, infoY + 2, 22, 22);
+        CGFloat likeS = 24 * s;
+        _likeBtn.frame = CGRectMake(W - margin - 100 * s, infoY + 4 * s, likeS, likeS);
+        _likeCountLabel.frame = CGRectMake(W - margin - 72 * s, infoY + 6 * s, 64 * s, 20 * s);
+        _commentBtn.frame = CGRectMake(W - margin - 24 * s, infoY + 4 * s, likeS, likeS);
         _commentCountLabel.hidden = YES;
 
-        CGFloat barY = infoY + 50;
-        _progress.frame = CGRectMake(margin, barY, W - margin * 2, 18);
-        _timeNow.frame = CGRectMake(margin, barY + 20, 50, 12);
-        _timeTotal.frame = CGRectMake(W - margin - 50, barY + 20, 50, 12);
-        _qualityLabel.frame = CGRectMake(cx - 40, barY + 2, 80, 12);
+        CGFloat barY = infoY + titleH + gap1 + artistH + gap2;
+        _progress.frame = CGRectMake(margin, barY, W - margin * 2, barH);
+        _timeNow.frame = CGRectMake(margin, barY + barH + gap3, 52 * s, timeH);
+        _timeTotal.frame = CGRectMake(W - margin - 52 * s, barY + barH + gap3, 52 * s, timeH);
+        _qualityLabel.frame = CGRectMake(W / 2 - 44 * s, barY + (barH - 13 * s) / 2, 88 * s, 13 * s);
 
-        CGFloat cy = barY + 58;
-        CGFloat cx2 = W / 2;
-        CGFloat gap = 26;
-        CGFloat loopS = 28, navS = 28, playS = 44, listS = 28;
+        CGFloat cy = barY + barH + gap3 + timeH + gap4;
+        CGFloat cx = W / 2;
+        CGFloat gap = 26 * s;
+        CGFloat loopS = 28 * s, navS = 28 * s, playS = 44 * s, listS = 28 * s;
         CGFloat clusterW = loopS + navS + playS + navS + listS + gap * 4;
-        CGFloat sx = cx2 - clusterW / 2;
+        CGFloat sx = cx - clusterW / 2;
         _loopBtn.frame = CGRectMake(sx, cy - loopS / 2, loopS, loopS);
         _prevBtn.frame = CGRectMake(sx + loopS + gap, cy - navS / 2, navS, navS);
         _playBtn.frame = CGRectMake(sx + loopS + gap + navS + gap, cy - playS / 2, playS, playS);
         _nextBtn.frame = CGRectMake(sx + loopS + gap + navS + gap + playS + gap, cy - navS / 2, navS, navS);
         _listBtn.frame = CGRectMake(sx + clusterW - listS, cy - listS / 2, listS, listS);
 
-        CGFloat lyricTop = cy + 26;
+        CGFloat lyricTop = cy + 26 * s;
         CGFloat lyricH = H - lyricTop - bottomBarH - 6;
         _lyricView.hidden = (lyricH < 40);
         _lyricView.frame = CGRectMake(0, lyricTop, W, MAX(0, lyricH));
