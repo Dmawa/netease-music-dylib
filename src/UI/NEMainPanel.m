@@ -123,6 +123,8 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 @property (nonatomic, copy) NSString *hint;
 @property (nonatomic, strong, nullable) NELoginView *loginView;
 @property (nonatomic, strong) NESettingsPage *settingsPage;
+/// 从哪个 tab 进入播放页（收起时返回）
+@property (nonatomic, assign) NSInteger previousTab;
 
 @end
 
@@ -237,6 +239,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)sidebar:(id)sidebar didSelectIndex:(NSInteger)index {
     self.settingsPage.hidden = YES;      // 切 tab 时关掉设置页
+    if (self.tab == NEPanelTabPlayer) [self setNeedsLayout];
     self.tab = (NEPanelTab)index;
     if (self.tab == NEPanelTabRecommend) self.browsingList = NO;
     if (self.tab == NEPanelTabDiscover) [self loadToplistsIfNeeded];
@@ -277,8 +280,13 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     }
     self.sidebar.frame = CGRectMake(0, 44, sideW, H - 44);
 
-    CGFloat contentX = sideW;
-    CGFloat contentW = W - sideW;
+    // 播放页沉浸：隐藏侧边栏与顶栏，内容铺满
+    BOOL immersive = (self.tab == NEPanelTabPlayer);
+    self.sidebar.hidden = immersive;
+    self.topBar.hidden = immersive;
+
+    CGFloat contentX = immersive ? 0 : sideW;
+    CGFloat contentW = immersive ? W : W - sideW;
 
     // 顶栏
     self.topBar.frame = CGRectMake(contentX, 8, contentW, 44);
@@ -286,7 +294,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     self.loginButton.frame = CGRectMake(contentW - loginW - 12, 8, loginW, 30);
     self.topSearch.frame = CGRectMake(8, 2, contentW - loginW - gap - 16, 40);
 
-    CGFloat top = 58;
+    CGFloat top = immersive ? 0 : 58;
     CGFloat playerH = 64;
     CGRect content = CGRectMake(contentX, top, contentW, MAX(0, H - top - playerH));
 
@@ -393,16 +401,12 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     if (self.tab == NEPanelTabRoam) {
         if (ip.row >= (NSInteger)self.roamSongs.count) return;
         [[NEPlayer shared] playQueue:self.roamSongs atIndex:ip.row];
-        self.tab = NEPanelTabPlayer;
-        [self highlightTab];
-        [self reload];
+        [self openPlayerPage];
         return;
     }
     if (self.loading || ip.row >= (NSInteger)self.songs.count) return;
     [[NEPlayer shared] playQueue:self.songs atIndex:ip.row];
-    self.tab = NEPanelTabPlayer;
-    [self highlightTab];
-    [self reload];
+    [self openPlayerPage];
 }
 
 #pragma mark - NEDiscoverPageDelegate
@@ -414,9 +418,7 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 - (void)discoverPage:(id)page didPlaySong:(NESong *)song {
     if (!song) return;
     [[NEPlayer shared] playQueue:@[song] atIndex:0];
-    self.tab = NEPanelTabPlayer;
-    [self highlightTab];
-    [self reload];
+    [self openPlayerPage];
 }
 
 - (void)discoverPage:(id)page didLoadSongs:(NSArray<NESong *> *)songs title:(NSString *)title {
@@ -597,6 +599,12 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
     _playerPage.hidden = YES;
     [self addSubview:_playerPage];
 
+    __weak typeof(self) weakSelf = self;
+    _playerPage.onCollapse = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        [strongSelf closePlayerPage];
+    };
+
     _profilePage = [[NEProfilePage alloc] initWithFrame:CGRectZero];
     _profilePage.hidden = YES;
     _profilePage.delegate = self;
@@ -732,9 +740,20 @@ typedef NS_ENUM(NSInteger, NEPanelTab) {
 
 - (void)openPlayerPage {
     if (self.tab == NEPanelTabPlayer) return;
-    self.tab = NEPanelTabPlayer;
+    self.previousTab = (NSInteger)self.tab;
     self.settingsPage.hidden = YES;
+    self.tab = NEPanelTabPlayer;
     [self highlightTab];
+    [self setNeedsLayout];
+    [self reload];
+}
+
+- (void)closePlayerPage {
+    NEPanelTab back = (NEPanelTab)self.previousTab;
+    if (back == NEPanelTabPlayer || back < 0) back = NEPanelTabRecommend;
+    self.tab = back;
+    [self highlightTab];
+    [self setNeedsLayout];
     [self reload];
 }
 

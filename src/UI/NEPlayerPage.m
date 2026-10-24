@@ -47,6 +47,7 @@
 @property (nonatomic, strong) UIButton *moreBtn;
 @property (nonatomic, strong) UIButton *translateBtn;
 
+@property (nonatomic, strong) UIButton *collapseBtn;
 @property (nonatomic, strong) NELyricView *lyricView;
 @property (nonatomic, strong) NELyric *lyric;
 
@@ -261,6 +262,11 @@
     [_translateBtn addTarget:self action:@selector(toggleTranslation) forControlEvents:UIControlEventTouchUpInside];
     for (UIButton *b in @[_deviceBtn, _lightBtn, _infoBtn, _downloadBtn, _moreBtn, _translateBtn]) [self addSubview:b];
 
+    // ---------- 收起按钮 ----------
+    _collapseBtn = [self iconButton:@"chevron.down" size:20 action:@selector(collapseTapped)];
+    _collapseBtn.tintColor = NEColor(0xFFFFFF, 0.85);
+    [self addSubview:_collapseBtn];
+
     // ---------- 歌词 ----------
     _lyricView = [[NELyricView alloc] initWithFrame:CGRectZero];
     _lyricView.delegate = self;
@@ -303,6 +309,7 @@
     [self setIcon:@"info.circle" for:_infoBtn size:15 * s];
     [self setIcon:@"arrow.down.circle" for:_downloadBtn size:15 * s];
     [self setIcon:@"ellipsis" for:_moreBtn size:15 * s];
+    [self setIcon:@"chevron.down" for:_collapseBtn size:20 * s];
     [_progress setThumbImage:[self dotImageWithSize:11 * s color:UIColor.whiteColor]
                     forState:UIControlStateNormal];
     _lyricView.fontScale = s;
@@ -345,6 +352,9 @@
     CGFloat tw = 26.0 * s, th = 20.0 * s;
     _translateBtn.frame = CGRectMake(W - margin - tw, by + (bottomBarH - th) / 2, tw, th);
     _translateBtn.layer.cornerRadius = th / 2;
+
+    CGFloat chevronS = 30 * s;
+    _collapseBtn.frame = CGRectMake(wide ? margin - 4 : 8, wide ? margin - 6 : 8, chevronS, chevronS);
 
     if (wide) {
         CGFloat leftW = MIN(MAX(W * 0.52, 360), 680);
@@ -677,6 +687,10 @@
     }
     UIViewController *host = [self topMostVC];
     if (host) [host presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)collapseTapped {
+    if (self.onCollapse) self.onCollapse();
 }
 
 - (void)followArtist {
