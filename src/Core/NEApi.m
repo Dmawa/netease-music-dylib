@@ -241,12 +241,76 @@ static NSArray<NESong *> *NESongsFromArray(NSArray *arr) {
     [self fetchPlaylistSongs:playlistID complete:complete];
 }
 
+/// 批量取歌曲详情（v6 playlist/detail 的 tracks 只给前 10 首，必须用 trackIds 补全）
+- (void)fetchSongsByIDs:(NSArray<NSString *> *)ids complete:(NESongsBlock)complete {
+    [self fetchSongsByIDs:ids offset:0 collected:[NSMutableArray array] complete:complete];
+}
+
+- (void)fetchSongsByIDs:(NSArray<NSString *> *)ids
+                 offset:(NSInteger)offset
+              collected:(NSMutableArray *)out
+               complete:(NESongsBlock)complete {
+    if (offset >= (NSInteger)ids.count) {
+        complete([out copy], nil);
+        return;
+    }
+    NSInteger n = MIN(200, (NSInteger)ids.count - offset);
+    NSArray *chunk = [ids subarrayWithRange:NSMakeRange((NSUInteger)offset, (NSUInteger)n)];
+    NSString *idsParam = [NSString stringWithFormat:@"[%@]", [chunk componentsJoinedByString:@","]];
+    idsParam = [idsParam stringByReplacingOccurrencesOfString:@"[" withString:@"%5B"];
+    idsParam = [idsParam stringByReplacingOccurrencesOfString:@"]" withString:@"%5D"];
+    NSString *path = [NSString stringWithFormat:@"/api/song/detail?ids=%@", idsParam];
+
+    __weak typeof(self) weakSelf = self;
+    [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (error) { complete([out copy], error); return; }
+
+        NSMutableDictionary<NSString *, NESong *> *byID = [NSMutableDictionary dictionary];
+        NSArray *arr = json[@"songs"];
+        if ([arr isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *d in arr) {
+                if (![d isKindOfClass:[NSDictionary class]]) continue;
+                NESong *song = NESongFromJSON(d);
+                if (song.songID.length) byID[song.songID] = song;
+            }
+        }
+        for (NSString *sid in chunk) {
+            NESong *song = byID[sid];
+            if (song) [out addObject:song];
+        }
+        [self fetchSongsByIDs:ids offset:offset + n collected:out complete:complete];
+    }];
+}
+
 - (void)fetchPlaylistSongs:(NSString *)playlistID complete:(NESongsBlock)complete {
     NSString *path = [NSString stringWithFormat:@"/api/v6/playlist/detail?id=%@", playlistID];
+    __weak typeof(self) weakSelf = self;
     [[NESession shared] GET:path params:nil complete:^(id json, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
         if (error) { complete(nil, error); return; }
+
         NSDictionary *pl = json[@"playlist"];
         NSArray *tracks = pl[@"tracks"];
+        NSArray *trackIds = pl[@"trackIds"];
+
+        // v6 只返回前 10 首 tracks，用 trackIds 全量补
+        NSMutableArray<NSString *> *ids = [NSMutableArray array];
+        if ([trackIds isKindOfClass:[NSArray class]]) {
+            for (id t in trackIds) {
+                id ident = [t isKindOfClass:[NSDictionary class]] ? t[@"id"] : nil;
+                if (ident && [ident respondsToSelector:@selector(description)]) {
+                    [ids addObject:[ident description]];
+                }
+            }
+        }
+        if (ids.count &&
+            (![tracks isKindOfClass:[NSArray class]] || tracks.count < ids.count)) {
+            [self fetchSongsByIDs:ids complete:complete];
+            return;
+        }
         if (![tracks isKindOfClass:[NSArray class]]) {
             complete(@[], nil);
             return;
