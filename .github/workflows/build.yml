@@ -17,7 +17,7 @@ permissions:
 jobs:
   dylib:
     name: Player.dylib
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: 环境
@@ -57,7 +57,7 @@ jobs:
 
   shell:
     name: 空壳宿主 App
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: 编译空壳 App
@@ -82,7 +82,7 @@ jobs:
   package:
     name: 打包 IPA（注入 dylib）
     needs: [dylib, shell]
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
