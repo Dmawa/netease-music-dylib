@@ -66,13 +66,28 @@
 
 /// 关键：自定义全屏 UIWindow 默认会把整块屏幕的触摸都吃掉，
 /// 导致宿主 App 点哪里都没反应、只能点插件自己。
-/// 这里让窗口在「没命中悬浮球/面板」时返回 nil，事件继续下发给宿主。
+///
+/// 注意：不能靠 super hitTest 的结果来判断「是不是命中了自己」——
+/// UIKit 会在 window 与 rootViewController.view 之间插一层容器视图
+/// (UILayoutContainerView)，它会接住事件，判断永远不成立。
+/// 这里改成坐标白名单：只有落在悬浮球 / 面板范围内的点才由本窗口处理，
+/// 其余坐标一律返回 nil，事件继续分发给宿主 App。
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hit = [super hitTest:point withEvent:event];
-    if (!hit) return nil;
-    if (hit == self) return nil;
-    if (hit == self.rootViewController.view) return nil;
-    return hit;
+    if (self.ball && !self.ball.hidden && self.ball.alpha > 0.01) {
+        CGPoint p = [self.ball convertPoint:point fromWindow:self];
+        if (CGRectContainsPoint(self.ball.bounds, p)) {
+            UIView *hit = [self.ball hitTest:p withEvent:event];
+            return hit ?: self.ball;
+        }
+    }
+    if (self.panelContainer && !self.panelContainer.hidden && self.panelContainer.alpha > 0.01) {
+        CGPoint p = [self.panelContainer convertPoint:point fromWindow:self];
+        if (CGRectContainsPoint(self.panelContainer.bounds, p)) {
+            UIView *hit = [self.panelContainer hitTest:p withEvent:event];
+            return hit ?: self.panelContainer;
+        }
+    }
+    return nil;
 }
 
 #pragma mark - 悬浮球
