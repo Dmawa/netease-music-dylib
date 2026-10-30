@@ -74,14 +74,14 @@
 /// 其余坐标一律返回 nil，事件继续分发给宿主 App。
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
     if (self.ball && !self.ball.hidden && self.ball.alpha > 0.01) {
-        CGPoint p = [self.ball convertPoint:point fromWindow:self];
+        CGPoint p = [self.ball convertPoint:point fromView:self];
         if (CGRectContainsPoint(self.ball.bounds, p)) {
             UIView *hit = [self.ball hitTest:p withEvent:event];
             return hit ?: self.ball;
         }
     }
     if (self.panelContainer && !self.panelContainer.hidden && self.panelContainer.alpha > 0.01) {
-        CGPoint p = [self.panelContainer convertPoint:point fromWindow:self];
+        CGPoint p = [self.panelContainer convertPoint:point fromView:self];
         if (CGRectContainsPoint(self.panelContainer.bounds, p)) {
             UIView *hit = [self.panelContainer hitTest:p withEvent:event];
             return hit ?: self.panelContainer;
