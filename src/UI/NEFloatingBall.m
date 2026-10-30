@@ -1,6 +1,17 @@
 #import "NEFloatingBall.h"
 #import "NEUITheme.h"
 
+/// 空白区域不拦截触摸：命中自身时返回 nil，把事件让给宿主 App
+@interface NEPassthroughView : UIView
+@end
+
+@implementation NEPassthroughView
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    return (hit == self) ? nil : hit;
+}
+@end
+
 /// 允许跟随宿主旋转的根控制器（否则自定义 UIWindow 只会停在竖屏）
 @interface NEFloatingRootVC : UIViewController
 @end
@@ -8,6 +19,10 @@
 @implementation NEFloatingRootVC
 - (BOOL)shouldAutorotate { return YES; }
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations { return UIInterfaceOrientationMaskAll; }
+
+- (void)loadView {
+    self.view = [[NEPassthroughView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+}
 @end
 
 @interface NEFloatingBall () <UIGestureRecognizerDelegate>
@@ -45,6 +60,19 @@
         [self observeNotifications];
     }
     return self;
+}
+
+#pragma mark - 触摸透传
+
+/// 关键：自定义全屏 UIWindow 默认会把整块屏幕的触摸都吃掉，
+/// 导致宿主 App 点哪里都没反应、只能点插件自己。
+/// 这里让窗口在「没命中悬浮球/面板」时返回 nil，事件继续下发给宿主。
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    if (!hit) return nil;
+    if (hit == self) return nil;
+    if (hit == self.rootViewController.view) return nil;
+    return hit;
 }
 
 #pragma mark - 悬浮球
