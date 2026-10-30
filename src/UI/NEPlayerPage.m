@@ -26,8 +26,6 @@
 @property (nonatomic, strong) UILabel *vipBadge;
 @property (nonatomic, strong) UIButton *likeBtn;
 @property (nonatomic, strong) UILabel *likeCountLabel;
-@property (nonatomic, strong) UIButton *commentBtn;
-@property (nonatomic, strong) UILabel *commentCountLabel;
 
 @property (nonatomic, strong) UISlider *progress;
 @property (nonatomic, strong) UILabel *timeNow;
@@ -58,9 +56,7 @@
 @property (nonatomic, copy) NSString *loadedSongID;
 @property (nonatomic, copy) NSString *coverURLString;
 @property (nonatomic, copy) NSString *likedSongID;
-@property (nonatomic, assign) NSInteger commentTotal;
 @property (nonatomic, assign) NSInteger likeCount;
-@property (nonatomic, strong, nullable) UIViewController *commentsVC;
 @end
 
 @implementation NEPlayerPage
@@ -197,17 +193,6 @@
     _likeCountLabel.textColor = NEColor(0xFFFFFF, 0.7);
     [self addSubview:_likeCountLabel];
 
-    _commentBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    [_commentBtn setImage:[UIImage systemImageNamed:@"bubble.left"] forState:UIControlStateNormal];
-    _commentBtn.tintColor = NEColor(0xFFFFFF, 0.85);
-    [_commentBtn addTarget:self action:@selector(showComments) forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:_commentBtn];
-
-    _commentCountLabel = [UILabel new];
-    _commentCountLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    _commentCountLabel.textColor = NEColor(0xFFFFFF, 0.7);
-    [self addSubview:_commentCountLabel];
-
     // ---------- 进度 ----------
     _progress = [[UISlider alloc] initWithFrame:CGRectZero];
     _progress.minimumTrackTintColor = NEColor(0xFFFFFF, 0.92);
@@ -300,7 +285,6 @@
     _artistLabel.font = [UIFont systemFontOfSize:15 * s];
     _followBtn.titleLabel.font = [UIFont systemFontOfSize:10 * s weight:UIFontWeightMedium];
     _likeCountLabel.font = [UIFont systemFontOfSize:12 * s weight:UIFontWeightMedium];
-    _commentCountLabel.font = _likeCountLabel.font;
     _timeNow.font = [UIFont monospacedDigitSystemFontOfSize:11 * s weight:UIFontWeightRegular];
     _timeTotal.font = _timeNow.font;
     _qualityLabel.font = [UIFont systemFontOfSize:10 * s];
@@ -392,13 +376,9 @@
         _followBtn.layer.cornerRadius = 10 * s;
 
         CGFloat likeS = 24 * s;
-        CGFloat likeX = margin + infoW - 160 * s;
+        CGFloat likeX = margin + infoW - 96 * s;
         _likeBtn.frame = CGRectMake(likeX, infoY + 8 * s, likeS, likeS);
         _likeCountLabel.frame = CGRectMake(likeX + 27 * s, infoY + 10 * s, 64 * s, 20 * s);
-        CGFloat cmtX = margin + infoW - 44 * s;
-        _commentBtn.frame = CGRectMake(cmtX, infoY + 8 * s, likeS, likeS);
-        _commentCountLabel.hidden = NO;
-        _commentCountLabel.frame = CGRectMake(cmtX + 27 * s, infoY + 10 * s, 52 * s, 20 * s);
 
         CGFloat barY = infoY + titleH + gap1 + artistH + gap2;
         _progress.frame = CGRectMake(margin, barY, infoW - 10, barH);
@@ -445,10 +425,8 @@
         _followBtn.layer.cornerRadius = 10 * s;
 
         CGFloat likeS = 24 * s;
-        _likeBtn.frame = CGRectMake(W - margin - 104 * s, infoY + 3 * s, likeS, likeS);
-        _likeCountLabel.frame = CGRectMake(W - margin - 78 * s, infoY + 4 * s, 64 * s, 20 * s);
-        _commentBtn.frame = CGRectMake(W - margin - 26 * s, infoY + 3 * s, likeS, likeS);
-        _commentCountLabel.hidden = YES;
+        _likeBtn.frame = CGRectMake(W - margin - 96 * s, infoY + 3 * s, likeS, likeS);
+        _likeCountLabel.frame = CGRectMake(W - margin - 70 * s, infoY + 4 * s, 64 * s, 20 * s);
 
         CGFloat barY = infoY + titleH + gap1 + artistH + gap2;
         _progress.frame = CGRectMake(margin, barY, W - margin * 2, barH);
@@ -512,10 +490,8 @@
 
 - (void)onTrack {
     self.likedSongID = nil;
-    self.commentTotal = 0;
     self.likeCount = 0;
     [self loadLyricForCurrentSong];
-    [self loadCommentCount];
     [self loadLikeState];
     [self refresh];
 }
@@ -548,7 +524,6 @@
     [_playBtn setImage:[UIImage systemImageNamed:(playing ? @"pause.fill" : @"play.fill")] forState:UIControlStateNormal];
     [self updateLoopIcon];
     [self updateLikeButton];
-    [self updateCommentCount];
 
     _progress.maximumValue = MAX(1.0, p.duration);
     if (!self.userSeeking) {
@@ -587,10 +562,6 @@
               forState:UIControlStateNormal];
     _likeBtn.tintColor = liked ? NEColor(0xFA3B3B, 1.0) : NEColor(0xFFFFFF, 0.85);
     _likeCountLabel.text = [self formatCount:self.likeCount];
-}
-
-- (void)updateCommentCount {
-    _commentCountLabel.text = [self formatCount:self.commentTotal];
 }
 
 #pragma mark - 黑胶旋转
@@ -779,74 +750,6 @@
         self.likeCount = MAX(0, self.likeCount + (willLike ? 1 : -1));
         [self updateLikeButton];
     }];
-}
-
-- (void)loadCommentCount {
-    NESong *song = [NEPlayer shared].currentSong;
-    if (!song.songID.length) return;
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] fetchCommentsForSongID:song.songID limit:1
-                                complete:^(NSArray<NSDictionary *> *comments, NSInteger total, NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) return;
-        self.commentTotal = total;
-        [self updateCommentCount];
-    }];
-}
-
-- (void)showComments {
-    NESong *song = [NEPlayer shared].currentSong;
-    if (!song.songID.length) return;
-    __weak typeof(self) weakSelf = self;
-    [[NEApi shared] fetchCommentsForSongID:song.songID limit:30
-                                complete:^(NSArray<NSDictionary *> *comments, NSInteger total, NSError *error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) return;
-        [self presentComments:comments error:error];
-    }];
-}
-
-- (void)presentComments:(NSArray<NSDictionary *> *)comments error:(NSError *)error {
-    NSMutableString *text = [NSMutableString string];
-    for (NSDictionary *c in comments) {
-        if (![c isKindOfClass:[NSDictionary class]]) continue;
-        NSDictionary *user = [c[@"user"] isKindOfClass:[NSDictionary class]] ? c[@"user"] : nil;
-        NSString *name = [user[@"nickname"] isKindOfClass:[NSString class]] ? user[@"nickname"] : @"匿名用户";
-        NSString *content = [c[@"content"] isKindOfClass:[NSString class]] ? c[@"content"] : @"";
-        NSNumber *liked = [c[@"likedCount"] isKindOfClass:[NSNumber class]] ? c[@"likedCount"] : @0;
-        [text appendFormat:@"%@  ♡%ld\n%@\n\n", name, (long)[liked integerValue], content];
-    }
-    if (!text.length) [text appendString:(error.localizedDescription ?: @"暂无评论")];
-
-    UIViewController *vc = [UIViewController new];
-    vc.view.backgroundColor = NE_BG;
-    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
-
-    UITextView *tv = [[UITextView alloc] initWithFrame:vc.view.bounds];
-    tv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    tv.editable = NO;
-    tv.backgroundColor = UIColor.clearColor;
-    tv.textColor = NE_TEXT;
-    tv.font = [UIFont systemFontOfSize:13];
-    tv.text = text;
-    tv.contentInset = UIEdgeInsetsMake(60, 16, 24, 16);
-    [vc.view addSubview:tv];
-
-    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
-    [close setTitle:@"关闭" forState:UIControlStateNormal];
-    close.frame = CGRectMake(vc.view.bounds.size.width - 76, 46, 64, 34);
-    close.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-    [close addTarget:self action:@selector(dismissComments) forControlEvents:UIControlEventTouchUpInside];
-    [vc.view addSubview:close];
-
-    self.commentsVC = vc;
-    UIViewController *host = [self topMostVC];
-    if (host) [host presentViewController:vc animated:YES completion:nil];
-}
-
-- (void)dismissComments {
-    [self.commentsVC dismissViewControllerAnimated:YES completion:nil];
-    self.commentsVC = nil;
 }
 
 #pragma mark - 工具
