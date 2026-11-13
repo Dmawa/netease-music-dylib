@@ -378,11 +378,14 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 
     // 单曲循环
     if (self.playMode == NEPlayModeSingleLoop) {
-        [self.player seekToTime:CMTimeMakeWithSeconds(0, NSEC_PER_SEC)
-                toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+        // 恢复出来的队列（还没真正建 AVPlayer）直接重新解析
+        if (!self.player || !self.player.currentItem) {
+            [self loadCurrentAndPlay];
+            return;
+        }
+        [self seekTo:0];
         [self.player play];
         self.isPlaying = YES;
-        self.currentTime = 0;
         [self notifyState];
         return;
     }
@@ -440,6 +443,10 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
         [self.player pause];
         self.isPlaying = NO;
     } else {
+        // 顺序播放停在结尾后再点播放：从头开始
+        if (self.duration > 0 && self.currentTime >= self.duration - 0.6) {
+            [self seekTo:0];
+        }
         [self.player play];
         self.isPlaying = YES;
     }
@@ -449,7 +456,16 @@ static NSString *const kNEPlayerStateKey = @"NEPlayerLastState";
 
 - (void)next {
     NSInteger count = (NSInteger)self.queue.count;
-    if (count <= 1) return;
+    if (count <= 1) {
+        // 只有一首时，列表循环/单曲循环 = 重播；顺序模式不响应
+        if (count == 1 && self.playMode != NEPlayModeSequential) {
+            [self seekTo:0];
+            [self.player play];
+            self.isPlaying = YES;
+            [self notifyState];
+        }
+        return;
+    }
 
     if (self.playMode == NEPlayModeShuffle) {
         NSInteger idx;

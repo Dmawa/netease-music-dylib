@@ -655,7 +655,7 @@
         case NEPlayModeSequential: name = @"顺序播放"; break;
         default: name = @"列表循环"; break;
     }
-    [self presentAlert:@"播放模式" message:name];
+    [self showToast:name];
 }
 
 - (void)openPlaylist {
@@ -669,6 +669,35 @@
     }
     UIViewController *host = [self topMostVC];
     if (host) [host presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showToast:(NSString *)message {
+    UILabel *toast = [UILabel new];
+    toast.text = message;
+    toast.font = [UIFont systemFontOfSize:13 * [self uiScale] weight:UIFontWeightMedium];
+    toast.textColor = UIColor.whiteColor;
+    toast.backgroundColor = [UIColor colorWithWhite:0 alpha:0.78];
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.layer.cornerRadius = 14;
+    toast.layer.cornerCurve = kCACornerCurveContinuous;
+    toast.clipsToBounds = YES;
+
+    CGSize fit = [toast sizeThatFits:CGSizeMake(240, 40)];
+    CGFloat w = fit.width + 28;
+    toast.frame = CGRectMake((self.bounds.size.width - w) / 2,
+                             self.bounds.size.height - 120, w, 30);
+    toast.alpha = 0;
+    [self addSubview:toast];
+
+    [UIView animateWithDuration:0.18 animations:^{
+        toast.alpha = 1;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.24 delay:1.1 options:0 animations:^{
+            toast.alpha = 0;
+        } completion:^(BOOL done) {
+            [toast removeFromSuperview];
+        }];
+    }];
 }
 
 - (void)collapseTapped {
